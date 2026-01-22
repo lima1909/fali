@@ -1,16 +1,21 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 )
 
+// A SkipList is a data structure that allows for fast search, insertion, and deletion within a sorted list.
+// It acts as an alternative to balanced binary search trees.
+//
+// Think of a SkipList as a standard Sorted Linked List but with "express lanes."
+//
 // https://en.wikipedia.org/wiki/Skip_list
+//
 
 const (
-	maxLevel = 16 // supports up to ~4.3 million elements
-	p        = 0.25
+	maxLevel   = 16 // supports up to ~4.3 million elements
+	population = 0.25
 )
 
 type node[V any] struct {
@@ -20,40 +25,35 @@ type node[V any] struct {
 	next  [maxLevel]*node[V]
 }
 
-func (n node[V]) String() string {
-	return fmt.Sprintf("{K: %d, L: %d}", n.key, n.level)
-}
-
 type SkipList[V any] struct {
 	head  *node[V]
 	level byte
+
+	rnd *rand.Rand
 }
 
-// randomLevel generates a random height
-func randomLevel() byte {
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+// randomLevel generates a random height (level)
+func (sl *SkipList[V]) randomLevel() byte {
 	lvl := byte(1)
-	for lvl < maxLevel && rnd.Float64() < p {
+	for lvl < maxLevel && sl.rnd.Float64() < population {
 		lvl++
 	}
 	return lvl
 }
 
-// New creates a new SkipList
-func New[V any]() *SkipList[V] {
+// NewSkipList creates a new SkipList
+func NewSkipList[V any]() *SkipList[V] {
 	return &SkipList[V]{
 		head:  &node[V]{level: maxLevel},
 		level: 1,
+		rnd:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // Get returns value and whether it exists
 func (sl *SkipList[V]) Get(key uint32) (V, bool) {
 	x := sl.head
-	i := sl.level
-
-	for i > 0 {
-		i--
+	for i := int(sl.level) - 1; i >= 0; i-- {
 		for x.next[i] != nil && x.next[i].key < key {
 			x = x.next[i]
 		}
@@ -70,13 +70,11 @@ func (sl *SkipList[V]) Get(key uint32) (V, bool) {
 }
 
 // Put inserts or updates a key, with the given value
-func (sl *SkipList[V]) Put(key uint32, value V) {
+// If the set did not previously contain this value, true is returned, otherwise false.
+func (sl *SkipList[V]) Put(key uint32, value V) bool {
 	update := [maxLevel]*node[V]{}
 	x := sl.head
-	i := sl.level
-
-	for i > 0 {
-		i--
+	for i := int(sl.level) - 1; i >= 0; i-- {
 		// move forward while next node's key < insertion key
 		for x.next[i] != nil && x.next[i].key < key {
 			x = x.next[i]
@@ -89,10 +87,10 @@ func (sl *SkipList[V]) Put(key uint32, value V) {
 	x = x.next[0]
 	if x != nil && x.key == key {
 		x.value = value
-		return
+		return false
 	}
 
-	lvl := randomLevel()
+	lvl := sl.randomLevel()
 	if lvl > sl.level {
 		for i := sl.level; i < lvl; i++ {
 			update[i] = sl.head
@@ -101,26 +99,21 @@ func (sl *SkipList[V]) Put(key uint32, value V) {
 	}
 
 	// create new insert node
-	n := &node[V]{
-		key:   key,
-		value: value,
-		level: lvl,
-	}
-
+	n := &node[V]{key: key, value: value, level: lvl}
 	for i := range lvl {
 		n.next[i] = update[i].next[i]
 		update[i].next[i] = n
 	}
+
+	return true
 }
 
 // Delete removes the value for a given key
+// If the key was not found: false, otherwise true, if the key was deleted.
 func (sl *SkipList[V]) Delete(key uint32) bool {
 	update := [maxLevel]*node[V]{}
 	x := sl.head
-	i := sl.level
-
-	for i > 0 {
-		i--
+	for i := int(sl.level) - 1; i >= 0; i-- {
 		for x.next[i] != nil && x.next[i].key < key {
 			x = x.next[i]
 		}
@@ -147,65 +140,35 @@ func (sl *SkipList[V]) Delete(key uint32) bool {
 	return true
 }
 
-func (sl *SkipList[V]) Print() {
-	if sl.head == nil || sl.head.next[0] == nil {
-		return
+// Range returns all values for keys in the range [from, to] inclusive
+func (sl *SkipList[V]) Range(from, to uint32) []V {
+	if from > to {
+		return nil
 	}
 
-	fmt.Printf("[L: %d] :: ", sl.level)
-
+	// find from position
 	x := sl.head
-	for x != nil {
-		// ignore head for printing
-		if x == sl.head {
-			x = x.next[0]
-			continue
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for x.next[i] != nil && x.next[i].key < from {
+			x = x.next[i]
 		}
-
-		fmt.Printf("%s, ", x)
-		x = x.next[0]
 	}
-	fmt.Printf("\n")
-}
 
-func (sl *SkipList[V]) PrintLevels() {
-	x := sl.head
-	for x != nil {
+	x = x.next[0]
+	if x == nil {
+		return nil
+	}
 
-		if x.next[0] != nil {
-			fmt.Printf("{K: %d :: ", x.next[0].key)
-			// for i := x.level - 1; i >= 0; i-- {
-			i := sl.level
-			for i > 0 {
-				i--
-				if x.next[i] != nil {
-					fmt.Printf("%d, ", x.next[i].key)
-				}
-			}
-			fmt.Printf("} ")
+	result := make([]V, 0, 16)
+	result = append(result, x.value)
+
+	// find to position
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for x.next[i] != nil && x.next[i].key <= to {
+			x = x.next[i]
+			result = append(result, x.value)
 		}
-		x = x.next[0]
 	}
-	fmt.Printf("\n")
-}
 
-func main() {
-	sl := New[int]()
-	sl.Print()
-	sl.Put(2, 2)
-	sl.Print()
-	sl.Put(1, 1)
-	sl.Print()
-	sl.Put(3, 3)
-	sl.Print()
-	sl.Put(4, 4)
-	sl.Print()
-	sl.Put(5, 5)
-	sl.Print()
-
-	sl.PrintLevels()
-
-	fmt.Println(sl.Get(2))
-	fmt.Println(sl.Get(5))
-
+	return result
 }
