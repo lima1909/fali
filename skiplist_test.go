@@ -21,6 +21,7 @@ func TestBase(t *testing.T) {
 	assert.True(t, sl.Delete(2))
 	val, found = sl.Get(2)
 	assert.False(t, found)
+	assert.Equal(t, "", val)
 
 	assert.False(t, sl.Delete(2))
 
