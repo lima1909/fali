@@ -146,7 +146,7 @@ func (sl *SkipList[V]) Range(from, to uint32) []V {
 		return nil
 	}
 
-	// find from position
+	// find the first node >= from
 	x := sl.head
 	for i := int(sl.level) - 1; i >= 0; i-- {
 		for x.next[i] != nil && x.next[i].key < from {
@@ -154,20 +154,17 @@ func (sl *SkipList[V]) Range(from, to uint32) []V {
 		}
 	}
 
+	// move to the actual first node at level 0
 	x = x.next[0]
-	if x == nil {
+	if x == nil || x.key > to {
 		return nil
 	}
 
+	// collect all nodes until we exceed 'to'
 	result := make([]V, 0, 16)
-	result = append(result, x.value)
-
-	// find to position
-	for i := int(sl.level) - 1; i >= 0; i-- {
-		for x.next[i] != nil && x.next[i].key <= to {
-			x = x.next[i]
-			result = append(result, x.value)
-		}
+	for x != nil && x.key <= to {
+		result = append(result, x.value)
+		x = x.next[0] // Always stay on the ground floor (Level 0)
 	}
 
 	return result
