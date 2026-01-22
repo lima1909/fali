@@ -69,11 +69,13 @@ func (sl *SkipList[V]) Get(key uint32) (V, bool) {
 	return zeroVal, false
 }
 
-// Put inserts or updates a key, with the given value
-// If the set did not previously contain this value, true is returned, otherwise false.
+// Put inserts or updates a key with the given value.
+// Returns true if a new node was inserted, false if an existing key was updated.
 func (sl *SkipList[V]) Put(key uint32, value V) bool {
 	update := [maxLevel]*node[V]{}
 	x := sl.head
+
+	// search for the position and fill the 'update' array
 	for i := int(sl.level) - 1; i >= 0; i-- {
 		// move forward while next node's key < insertion key
 		for x.next[i] != nil && x.next[i].key < key {
@@ -83,26 +85,34 @@ func (sl *SkipList[V]) Put(key uint32, value V) bool {
 		update[i] = x
 	}
 
-	// node found: UPDATE
+	// check if the key already exists
 	x = x.next[0]
 	if x != nil && x.key == key {
-		x.value = value
-		return false
+		x.value = value // update existing value
+		return false    // not a new insertion
 	}
 
+	// key does not exist, prepare new node level
 	lvl := sl.randomLevel()
+
+	// if the new level is higher than current, initialize 'update' for the gap
 	if lvl > sl.level {
 		for i := sl.level; i < lvl; i++ {
 			update[i] = sl.head
 		}
-		sl.level = lvl
 	}
 
-	// create new insert node
+	// create and link the new node
 	n := &node[V]{key: key, value: value, level: lvl}
+
 	for i := range lvl {
 		n.next[i] = update[i].next[i]
 		update[i].next[i] = n
+	}
+
+	// update global level
+	if lvl > sl.level {
+		sl.level = lvl
 	}
 
 	return true
