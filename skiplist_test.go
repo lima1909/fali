@@ -52,10 +52,7 @@ func TestTraverse(t *testing.T) {
 	c = 0
 	toTheEnd = sl.Traverse(func(key, val uint32) bool {
 		c += 1
-		if c == 5 {
-			return false
-		}
-		return true
+		return c != 5
 	})
 	assert.False(t, toTheEnd)
 	assert.Equal(t, 5, c)
