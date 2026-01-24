@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -10,6 +11,8 @@ import (
 // It acts as an alternative to balanced binary search trees.
 //
 // Think of a SkipList as a standard Sorted Linked List but with "express lanes."
+//
+// The zero value is not allowed as Key!
 //
 // https://en.wikipedia.org/wiki/Skip_list
 //
@@ -57,7 +60,14 @@ func NewSkipList[K cmp.Ordered, V any]() *SkipList[K, V] {
 
 // Put inserts or updates a key with the given value.
 // Returns true if a new node was inserted, false if an existing key was updated.
+//
+// Panics if the key: K is the zero default value (0 for int, "" for string, ...)!
 func (sl *SkipList[K, V]) Put(key K, value V) bool {
+	var k K
+	if key == k {
+		panic(fmt.Sprintf("The zero default value the Key: '%v' is not allowed", key))
+	}
+
 	update := [maxLevel]*node[K, V]{}
 	x := sl.head
 

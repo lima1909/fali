@@ -33,6 +33,35 @@ func TestBase(t *testing.T) {
 	assert.Equal(t, "c", val)
 }
 
+func TestNilValue(t *testing.T) {
+	sl := NewSkipList[string, *string]()
+	sl.Put("a", nil)
+
+	val, found := sl.Get("a")
+	assert.True(t, found)
+	assert.Nil(t, val)
+}
+
+func TestPutWithZeroValueKey(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("Expected panic when putting zero value as Key")
+		}
+	}()
+
+	sl := NewSkipList[string, string]()
+	sl.Put("", "---")
+}
+
+func TestDeleteAndGetTheZeroValueKey(t *testing.T) {
+	sl := NewSkipList[string, string]()
+	assert.False(t, sl.Delete(""))
+
+	val, found := sl.Get("")
+	assert.False(t, found)
+	assert.Equal(t, "", val)
+}
+
 func TestTraverse(t *testing.T) {
 	count := 10
 
