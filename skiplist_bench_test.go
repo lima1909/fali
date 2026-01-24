@@ -1,0 +1,70 @@
+package main
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+const (
+	count     = 3_000_000
+	found_val = 990_000
+	to        = 3000
+)
+
+func BenchmarkGet(b *testing.B) {
+	sl := NewSkipList[uint32]()
+	for i := 1; i <= count; i++ {
+		sl.Put(uint32(i), uint32(i))
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		_, found := sl.Get(uint32(found_val))
+		assert.True(b, found)
+	}
+}
+
+func BenchmarkTraverse(b *testing.B) {
+	sl := NewSkipList[uint32]()
+	for i := 1; i <= count; i++ {
+		sl.Put(uint32(i), uint32(i))
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		c := 0
+		toTheEnd := sl.Traverse(func(key, val uint32) bool {
+			c += 1
+			return true
+		})
+		assert.True(b, toTheEnd)
+		assert.Equal(b, count, c)
+
+	}
+}
+
+func BenchmarkRange(b *testing.B) {
+	sl := NewSkipList[uint32]()
+	for i := 1; i <= count; i++ {
+		sl.Put(uint32(i), uint32(i))
+	}
+	b.ResetTimer()
+
+	result := make([]uint32, 0, 16)
+
+	for b.Loop() {
+		sl.Range(
+			uint32(found_val),
+			uint32(found_val+to),
+			func(key, val uint32) bool {
+				result = append(result, val)
+				return true
+			},
+		)
+
+		assert.Equal(b, to, len(result)-1)
+		// clear the results
+		result = result[:0]
+	}
+}

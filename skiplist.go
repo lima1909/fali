@@ -18,6 +18,8 @@ const (
 	population = 0.25
 )
 
+type VisitFn[V any] func(key uint32, val V) bool
+
 type node[V any] struct {
 	key   uint32 // maybe uint16 is enough (65_536 elements)
 	value V
@@ -33,6 +35,8 @@ type SkipList[V any] struct {
 }
 
 // randomLevel generates a random height (level)
+//
+//go:inline
 func (sl *SkipList[V]) randomLevel() byte {
 	lvl := byte(1)
 	for lvl < maxLevel && sl.rnd.Float64() < population {
@@ -50,25 +54,6 @@ func NewSkipList[V any]() *SkipList[V] {
 	}
 }
 
-// Get returns value and whether it exists
-func (sl *SkipList[V]) Get(key uint32) (V, bool) {
-	x := sl.head
-	for i := int(sl.level) - 1; i >= 0; i-- {
-		for x.next[i] != nil && x.next[i].key < key {
-			x = x.next[i]
-		}
-	}
-
-	x = x.next[0]
-	if x != nil && x.key == key {
-		// key found
-		return x.value, true
-	}
-
-	var zeroVal V
-	return zeroVal, false
-}
-
 // Put inserts or updates a key with the given value.
 // Returns true if a new node was inserted, false if an existing key was updated.
 func (sl *SkipList[V]) Put(key uint32, value V) bool {
@@ -78,8 +63,8 @@ func (sl *SkipList[V]) Put(key uint32, value V) bool {
 	// search for the position and fill the 'update' array
 	for i := int(sl.level) - 1; i >= 0; i-- {
 		// move forward while next node's key < insertion key
-		for x.next[i] != nil && x.next[i].key < key {
-			x = x.next[i]
+		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
+			x = next
 		}
 		// save the last node visited at this level
 		update[i] = x
@@ -124,8 +109,8 @@ func (sl *SkipList[V]) Delete(key uint32) bool {
 	update := [maxLevel]*node[V]{}
 	x := sl.head
 	for i := int(sl.level) - 1; i >= 0; i-- {
-		for x.next[i] != nil && x.next[i].key < key {
-			x = x.next[i]
+		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
+			x = next
 		}
 		update[i] = x
 	}
@@ -150,32 +135,95 @@ func (sl *SkipList[V]) Delete(key uint32) bool {
 	return true
 }
 
-// Range returns all values for keys in the range [from, to] inclusive
-func (sl *SkipList[V]) Range(from, to uint32) []V {
+// Traverse over the complete Skiplist and calling the visitor
+// the return value false means, not to the end, otherwise true
+func (sl *SkipList[V]) Traverse(visit VisitFn[V]) bool {
+	for next := sl.head.next[0]; next != nil; next = next.next[0] {
+		// break if false (simulate yield)
+		if !visit(next.key, next.value) {
+			// reads not to the end
+			return false
+		}
+	}
+
+	return true
+}
+
+// Range traverse 'from' until 'to' over Skiplist and calling the visitor
+func (sl *SkipList[V]) Range(from, to uint32, visit VisitFn[V]) {
 	if from > to {
-		return nil
+		return
 	}
 
 	// find the first node >= from
 	x := sl.head
 	for i := int(sl.level) - 1; i >= 0; i-- {
-		for x.next[i] != nil && x.next[i].key < from {
-			x = x.next[i]
+		for next := x.next[i]; next != nil && next.key < from; next = x.next[i] {
+			x = next
 		}
 	}
 
 	// move to the actual first node at level 0
 	x = x.next[0]
 	if x == nil || x.key > to {
-		return nil
+		return
 	}
 
 	// collect all nodes until we exceed 'to'
-	result := make([]V, 0, 16)
 	for x != nil && x.key <= to {
-		result = append(result, x.value)
+		if !visit(x.key, x.value) {
+			return
+		}
 		x = x.next[0] // Always stay on the ground floor (Level 0)
 	}
+}
 
-	return result
+// Get returns value and whether it exists
+func (sl *SkipList[V]) Get(key uint32) (V, bool) {
+	x := sl.head
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
+			x = next
+		}
+	}
+
+	x = x.next[0]
+	if x != nil && x.key == key {
+		// key found
+		return x.value, true
+	}
+
+	var zeroVal V
+	return zeroVal, false
+}
+
+// Min returns the value associated with the smallest key in the list.
+func (sl *SkipList[V]) Min() (V, bool) {
+	// The first node on the bottom level (level 0) is the minimum
+	first := sl.head.next[0]
+	if first == nil {
+		var zero V
+		return zero, false
+	}
+
+	return first.value, true
+}
+
+// Max returns the value associated with the largest key in the list O(log n).
+func (sl *SkipList[V]) Max() (V, bool) {
+	x := sl.head
+	// start at the highest lane and jump as far right as possible
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for x.next[i] != nil {
+			x = x.next[i]
+		}
+	}
+
+	// list is empty
+	if x == sl.head {
+		var zero V
+		return zero, false
+	}
+
+	return x.value, true
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +33,35 @@ func TestBase(t *testing.T) {
 	assert.Equal(t, "c", val)
 }
 
+func TestTraverse(t *testing.T) {
+	count := 10
+
+	sl := NewSkipList[uint32]()
+	for i := 1; i <= count; i++ {
+		sl.Put(uint32(i), uint32(i))
+	}
+
+	c := 0
+	toTheEnd := sl.Traverse(func(key, val uint32) bool {
+		c += 1
+		return true
+	})
+	assert.True(t, toTheEnd)
+	assert.Equal(t, count, c)
+
+	c = 0
+	toTheEnd = sl.Traverse(func(key, val uint32) bool {
+		c += 1
+		if c == 5 {
+			return false
+		}
+		return true
+	})
+	assert.False(t, toTheEnd)
+	assert.Equal(t, 5, c)
+
+}
+
 func TestRange(t *testing.T) {
 	sl := NewSkipList[uint32]()
 	sl.Put(1, 1)
@@ -41,7 +69,12 @@ func TestRange(t *testing.T) {
 	sl.Put(5, 5)
 	sl.Put(4, 4)
 
-	result := sl.Range(2, 42)
+	result := make([]uint32, 0)
+	sl.Range(2, 42,
+		func(key, val uint32) bool {
+			result = append(result, val)
+			return true
+		})
 	assert.Equal(t, []uint32{3, 4, 5}, result)
 }
 
@@ -52,7 +85,12 @@ func TestRangeInclusiveTo(t *testing.T) {
 	sl.Put(5, 5)
 	sl.Put(4, 4)
 
-	result := sl.Range(2, 5)
+	result := make([]uint32, 0)
+	sl.Range(2, 5,
+		func(key, val uint32) bool {
+			result = append(result, val)
+			return true
+		})
 	assert.Equal(t, []uint32{3, 4, 5}, result)
 }
 
@@ -63,7 +101,12 @@ func TestRangeInclusiveFromTo(t *testing.T) {
 	sl.Put(5, 5)
 	sl.Put(4, 4)
 
-	result := sl.Range(2, 5)
+	result := make([]uint32, 0)
+	sl.Range(2, 5,
+		func(key, val uint32) bool {
+			result = append(result, val)
+			return true
+		})
 	assert.Equal(t, []uint32{2, 3, 4, 5}, result)
 }
 
@@ -72,24 +115,40 @@ func TestNotInRange(t *testing.T) {
 	sl.Put(1, 1)
 	sl.Put(3, 3)
 
-	result := sl.Range(4, 42)
-	assert.Nil(t, result)
+	result := make([]uint32, 0)
+	sl.Range(4, 42,
+		func(key, val uint32) bool {
+			result = append(result, val)
+			return true
+		})
+	assert.Equal(t, 0, len(result))
 }
 
-func BenchmarkSkiplist(b *testing.B) {
-	count := 3_000_000
-	found_val := 990_000
-
+func TestMin(t *testing.T) {
 	sl := NewSkipList[uint32]()
-	for i := 1; i <= count; i++ {
-		sl.Put(uint32(i), uint32(i))
-	}
-	b.ResetTimer()
+	val, ok := sl.Min()
+	assert.False(t, ok)
+	assert.Equal(t, uint32(0), val)
 
-	for b.Loop() {
-		_, found := sl.Get(uint32(found_val))
-		if !found {
-			panic(fmt.Sprintf("NOT FOUND: %d", found_val))
-		}
-	}
+	sl.Put(1, 1)
+	val, ok = sl.Min()
+	assert.True(t, ok)
+	assert.Equal(t, uint32(1), val)
+}
+
+func TestMax(t *testing.T) {
+	sl := NewSkipList[uint32]()
+	val, ok := sl.Max()
+	assert.False(t, ok)
+	assert.Equal(t, uint32(0), val)
+
+	sl.Put(1, 1)
+	val, ok = sl.Max()
+	assert.True(t, ok)
+	assert.Equal(t, uint32(1), val)
+
+	sl.Put(5, 5)
+	val, ok = sl.Max()
+	assert.True(t, ok)
+	assert.Equal(t, uint32(5), val)
 }
