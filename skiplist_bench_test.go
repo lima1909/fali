@@ -13,7 +13,7 @@ const (
 )
 
 func BenchmarkGet(b *testing.B) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	for i := 1; i <= count; i++ {
 		sl.Put(uint32(i), uint32(i))
 	}
@@ -26,7 +26,7 @@ func BenchmarkGet(b *testing.B) {
 }
 
 func BenchmarkTraverse(b *testing.B) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	for i := 1; i <= count; i++ {
 		sl.Put(uint32(i), uint32(i))
 	}
@@ -45,13 +45,13 @@ func BenchmarkTraverse(b *testing.B) {
 }
 
 func BenchmarkRange(b *testing.B) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	for i := 1; i <= count; i++ {
 		sl.Put(uint32(i), uint32(i))
 	}
 	b.ResetTimer()
 
-	result := make([]uint32, 0, 16)
+	result := make([]uint32, 0, to)
 
 	for b.Loop() {
 		sl.Range(

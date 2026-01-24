@@ -7,7 +7,7 @@ import (
 )
 
 func TestBase(t *testing.T) {
-	sl := NewSkipList[string]()
+	sl := NewSkipList[int, string]()
 	assert.True(t, sl.Put(1, "a"))
 	assert.True(t, sl.Put(3, "c"))
 	assert.True(t, sl.Put(2, "b"))
@@ -36,7 +36,7 @@ func TestBase(t *testing.T) {
 func TestTraverse(t *testing.T) {
 	count := 10
 
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	for i := 1; i <= count; i++ {
 		sl.Put(uint32(i), uint32(i))
 	}
@@ -60,7 +60,7 @@ func TestTraverse(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[byte, uint32]()
 	sl.Put(1, 1)
 	sl.Put(3, 3)
 	sl.Put(5, 5)
@@ -68,7 +68,7 @@ func TestRange(t *testing.T) {
 
 	result := make([]uint32, 0)
 	sl.Range(2, 42,
-		func(key, val uint32) bool {
+		func(key byte, val uint32) bool {
 			result = append(result, val)
 			return true
 		})
@@ -76,15 +76,15 @@ func TestRange(t *testing.T) {
 }
 
 func TestRangeInclusiveTo(t *testing.T) {
-	sl := NewSkipList[uint32]()
-	sl.Put(1, 1)
-	sl.Put(3, 3)
-	sl.Put(5, 5)
-	sl.Put(4, 4)
+	sl := NewSkipList[string, uint32]()
+	sl.Put("a", 1)
+	sl.Put("c", 3)
+	sl.Put("z", 5)
+	sl.Put("x", 4)
 
 	result := make([]uint32, 0)
-	sl.Range(2, 5,
-		func(key, val uint32) bool {
+	sl.Range("b", "z",
+		func(key string, val uint32) bool {
 			result = append(result, val)
 			return true
 		})
@@ -92,7 +92,7 @@ func TestRangeInclusiveTo(t *testing.T) {
 }
 
 func TestRangeInclusiveFromTo(t *testing.T) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[int, uint32]()
 	sl.Put(2, 2)
 	sl.Put(3, 3)
 	sl.Put(5, 5)
@@ -100,7 +100,7 @@ func TestRangeInclusiveFromTo(t *testing.T) {
 
 	result := make([]uint32, 0)
 	sl.Range(2, 5,
-		func(key, val uint32) bool {
+		func(key int, val uint32) bool {
 			result = append(result, val)
 			return true
 		})
@@ -108,7 +108,7 @@ func TestRangeInclusiveFromTo(t *testing.T) {
 }
 
 func TestNotInRange(t *testing.T) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	sl.Put(1, 1)
 	sl.Put(3, 3)
 
@@ -122,7 +122,7 @@ func TestNotInRange(t *testing.T) {
 }
 
 func TestMin(t *testing.T) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	val, ok := sl.Min()
 	assert.False(t, ok)
 	assert.Equal(t, uint32(0), val)
@@ -134,7 +134,7 @@ func TestMin(t *testing.T) {
 }
 
 func TestMax(t *testing.T) {
-	sl := NewSkipList[uint32]()
+	sl := NewSkipList[uint32, uint32]()
 	val, ok := sl.Max()
 	assert.False(t, ok)
 	assert.Equal(t, uint32(0), val)

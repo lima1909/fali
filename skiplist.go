@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"math/rand"
 	"time"
 )
@@ -18,17 +19,17 @@ const (
 	population = 0.25
 )
 
-type VisitFn[V any] func(key uint32, val V) bool
+type VisitFn[K comparable, V any] func(key K, val V) bool
 
-type node[V any] struct {
-	key   uint32 // maybe uint16 is enough (65_536 elements)
+type node[K cmp.Ordered, V any] struct {
+	key   K
 	value V
 	level byte
-	next  [maxLevel]*node[V]
+	next  [maxLevel]*node[K, V]
 }
 
-type SkipList[V any] struct {
-	head  *node[V]
+type SkipList[K cmp.Ordered, V any] struct {
+	head  *node[K, V]
 	level byte
 
 	rnd *rand.Rand
@@ -37,7 +38,7 @@ type SkipList[V any] struct {
 // randomLevel generates a random height (level)
 //
 //go:inline
-func (sl *SkipList[V]) randomLevel() byte {
+func (sl *SkipList[K, V]) randomLevel() byte {
 	lvl := byte(1)
 	for lvl < maxLevel && sl.rnd.Float64() < population {
 		lvl++
@@ -46,9 +47,9 @@ func (sl *SkipList[V]) randomLevel() byte {
 }
 
 // NewSkipList creates a new SkipList
-func NewSkipList[V any]() *SkipList[V] {
-	return &SkipList[V]{
-		head:  &node[V]{level: maxLevel},
+func NewSkipList[K cmp.Ordered, V any]() *SkipList[K, V] {
+	return &SkipList[K, V]{
+		head:  &node[K, V]{level: maxLevel},
 		level: 1,
 		rnd:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
@@ -56,8 +57,8 @@ func NewSkipList[V any]() *SkipList[V] {
 
 // Put inserts or updates a key with the given value.
 // Returns true if a new node was inserted, false if an existing key was updated.
-func (sl *SkipList[V]) Put(key uint32, value V) bool {
-	update := [maxLevel]*node[V]{}
+func (sl *SkipList[K, V]) Put(key K, value V) bool {
+	update := [maxLevel]*node[K, V]{}
 	x := sl.head
 
 	// search for the position and fill the 'update' array
@@ -88,7 +89,7 @@ func (sl *SkipList[V]) Put(key uint32, value V) bool {
 	}
 
 	// create and link the new node
-	n := &node[V]{key: key, value: value, level: lvl}
+	n := &node[K, V]{key: key, value: value, level: lvl}
 
 	for i := range lvl {
 		n.next[i] = update[i].next[i]
@@ -105,8 +106,8 @@ func (sl *SkipList[V]) Put(key uint32, value V) bool {
 
 // Delete removes the value for a given key
 // If the key was not found: false, otherwise true, if the key was deleted.
-func (sl *SkipList[V]) Delete(key uint32) bool {
-	update := [maxLevel]*node[V]{}
+func (sl *SkipList[K, V]) Delete(key K) bool {
+	update := [maxLevel]*node[K, V]{}
 	x := sl.head
 	for i := int(sl.level) - 1; i >= 0; i-- {
 		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
@@ -137,7 +138,7 @@ func (sl *SkipList[V]) Delete(key uint32) bool {
 
 // Traverse over the complete Skiplist and calling the visitor
 // the return value false means, not to the end, otherwise true
-func (sl *SkipList[V]) Traverse(visit VisitFn[V]) bool {
+func (sl *SkipList[K, V]) Traverse(visit VisitFn[K, V]) bool {
 	for next := sl.head.next[0]; next != nil; next = next.next[0] {
 		// break if false (simulate yield)
 		if !visit(next.key, next.value) {
@@ -150,7 +151,7 @@ func (sl *SkipList[V]) Traverse(visit VisitFn[V]) bool {
 }
 
 // Range traverse 'from' until 'to' over Skiplist and calling the visitor
-func (sl *SkipList[V]) Range(from, to uint32, visit VisitFn[V]) {
+func (sl *SkipList[K, V]) Range(from, to K, visit VisitFn[K, V]) {
 	if from > to {
 		return
 	}
@@ -179,7 +180,7 @@ func (sl *SkipList[V]) Range(from, to uint32, visit VisitFn[V]) {
 }
 
 // Get returns value and whether it exists
-func (sl *SkipList[V]) Get(key uint32) (V, bool) {
+func (sl *SkipList[K, V]) Get(key K) (V, bool) {
 	x := sl.head
 	for i := int(sl.level) - 1; i >= 0; i-- {
 		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
@@ -198,7 +199,7 @@ func (sl *SkipList[V]) Get(key uint32) (V, bool) {
 }
 
 // Min returns the value associated with the smallest key in the list.
-func (sl *SkipList[V]) Min() (V, bool) {
+func (sl *SkipList[K, V]) Min() (V, bool) {
 	// The first node on the bottom level (level 0) is the minimum
 	first := sl.head.next[0]
 	if first == nil {
@@ -210,7 +211,7 @@ func (sl *SkipList[V]) Min() (V, bool) {
 }
 
 // Max returns the value associated with the largest key in the list O(log n).
-func (sl *SkipList[V]) Max() (V, bool) {
+func (sl *SkipList[K, V]) Max() (V, bool) {
 	x := sl.head
 	// start at the highest lane and jump as far right as possible
 	for i := int(sl.level) - 1; i >= 0; i-- {
