@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBase(t *testing.T) {
+func TestSplitListBase(t *testing.T) {
 	sl := NewSkipList[int, string]()
 	assert.True(t, sl.Put(1, "a"))
 	assert.True(t, sl.Put(3, "c"))
