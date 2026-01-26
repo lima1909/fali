@@ -1,4 +1,4 @@
-module github.com/lima1909/fali.git
+module github.com/lima1909/fali
 
 go 1.25.5
 
