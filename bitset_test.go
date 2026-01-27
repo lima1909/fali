@@ -20,7 +20,8 @@ func TestBitSetBase(t *testing.T) {
 
 	assert.Equal(t, 4, b.Count())
 	assert.Equal(t, 1, b.Len())
-	assert.Equal(t, 42, b.MaxSetValue())
+	assert.Equal(t, 0, b.Min())
+	assert.Equal(t, 42, b.Max())
 	assert.Equal(t, 0, b.MaxSetIndex())
 	assert.True(t, b.Contains(2))
 
@@ -30,7 +31,9 @@ func TestBitSetBase(t *testing.T) {
 	assert.Equal(t, 1, b.Len())
 
 	b.UnSet(42)
-	assert.Equal(t, 1, b.MaxSetValue())
+	assert.Equal(t, 1, b.Max())
+
+	_ = b.usedBytes()
 }
 
 func TestBitSetToBig(t *testing.T) {
@@ -118,4 +121,26 @@ func TestBitSetAndNot(t *testing.T) {
 	result.AndNot(b2)
 	result.Shrink()
 	assert.Equal(t, NewBitSetFrom[uint64](), result)
+}
+
+func TestBitSetMinMax(t *testing.T) {
+	b := NewBitSet[uint8]()
+	b.Set(0)
+	b.Set(1)
+	b.Set(5)
+	b.Set(52)
+	b.Set(67)
+	b.Set(130)
+
+	assert.Equal(t, 0, b.Min())
+	assert.Equal(t, 130, b.Max())
+	// 0, 1, 2
+	assert.Equal(t, 2, b.MaxSetIndex())
+
+	b.UnSet(0)
+	b.UnSet(130)
+	assert.Equal(t, 1, b.Min())
+	assert.Equal(t, 67, b.Max())
+	// 0, 1
+	assert.Equal(t, 1, b.MaxSetIndex())
 }
