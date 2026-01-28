@@ -28,3 +28,66 @@ func TestFreeListBase(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "z", val)
 }
+
+func TestFreeListCompactUnstable(t *testing.T) {
+	l := NewFreeList[string]()
+	l.Add("a")
+	l.Add("b")
+	l.Add("c")
+	l.Add("d")
+	l.Add("e")
+	l.Add("f")
+
+	l.Remove(1) // b
+	l.Remove(2) // c
+	l.Remove(4) // e
+
+	l.CompactUnstable()
+	assert.Equal(t, 3, len(l.slots))
+
+	val, found := l.Get(0)
+	assert.True(t, found)
+	assert.Equal(t, "a", val)
+
+	val, found = l.Get(1)
+	assert.True(t, found)
+	assert.Equal(t, "d", val)
+
+	val, found = l.Get(2)
+	assert.True(t, found)
+	assert.Equal(t, "f", val)
+}
+
+func TestFreeListCompactLinear(t *testing.T) {
+	l := NewFreeList[string]()
+	l.Add("a")
+	l.Add("b")
+	l.Add("c")
+	l.Add("d")
+	l.Add("e")
+	l.Add("f")
+
+	l.Remove(1) // b
+	l.Remove(2) // c
+	l.Remove(4) // e
+
+	removed := make([]int, 0)
+	l.CompactLinear(func(oldIndex, newIndex int) {
+		removed = append(removed, oldIndex)
+	})
+	// the index 0 is not moved
+	assert.Equal(t, []int{3, 5}, removed)
+	assert.Equal(t, 3, len(l.slots))
+
+	val, found := l.Get(0)
+	assert.True(t, found)
+	assert.Equal(t, "a", val)
+
+	val, found = l.Get(1)
+	assert.True(t, found)
+	assert.Equal(t, "d", val)
+
+	val, found = l.Get(2)
+	assert.True(t, found)
+	assert.Equal(t, "f", val)
+}

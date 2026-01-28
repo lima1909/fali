@@ -7,6 +7,8 @@ type slot[T any] struct {
 	occupied bool // Simple flag to know if this is data or a free link
 }
 
+// FreeList don't delete an Item, instead mark it as not occupied.
+// With one of the Compact Methods, you can remove thes palceholders and make the list smaller.
 type FreeList[T any] struct {
 	slots    []slot[T]
 	freeHead int // Index of the first free slot (-1 if none)
@@ -19,6 +21,7 @@ func NewFreeList[T any]() *FreeList[T] {
 	}
 }
 
+// Add an Item to the List.
 func (l *FreeList[T]) Add(item T) int {
 	// no free slots in the list, append to the end
 	if l.freeHead == -1 {
@@ -42,6 +45,8 @@ func (l *FreeList[T]) Add(item T) int {
 	return idx
 }
 
+// Remove mark the Item on the given index as deleted.
+// index must be >=0 and < len(slots), otherwise return Remove false and do nothing.
 func (l *FreeList[T]) Remove(index int) bool {
 	if index < 0 || index >= len(l.slots) || !l.slots[index].occupied {
 		return false
@@ -60,6 +65,8 @@ func (l *FreeList[T]) Remove(index int) bool {
 	return true
 }
 
+// Get the Item on the given index, or the zero value and false, if it not exist.
+// index must be >=0 and < len(slots), otherwise return Get zero value and false and do nothing.
 func (l *FreeList[T]) Get(index int) (T, bool) {
 	if index < 0 || index >= len(l.slots) {
 		var null T
@@ -71,5 +78,43 @@ func (l *FreeList[T]) Get(index int) (T, bool) {
 		var null T
 		return null, false
 	}
+
 	return slot.value, true
+}
+
+// CompactUnstable removes not used slots. Unstable means, the Indices breaks.
+func (l *FreeList[T]) CompactUnstable() {
+	keep := 0
+	for i := 0; i < len(l.slots); i++ {
+		if l.slots[i].occupied {
+			l.slots[keep] = l.slots[i]
+			keep++
+		}
+	}
+
+	l.slots = l.slots[:keep]
+	l.freeHead = -1
+}
+
+// CompactLinear removes not used slote.
+// If an Index has changed, yout get this Info with the Callback: onMove
+func (l *FreeList[T]) CompactLinear(onMove func(oldIndex, newIndex int)) {
+	keep := 0
+	for i := 0; i < len(l.slots); i++ {
+		if l.slots[i].occupied {
+			// If the read and write pointers are different, we need to move the data
+			if i != keep {
+				l.slots[keep] = l.slots[i]
+				onMove(i, keep)
+
+				// clear the old slot to prevent memory leaks
+				var null T
+				l.slots[i] = slot[T]{value: null, occupied: false, nextFree: -1}
+			}
+			keep++
+		}
+	}
+
+	l.slots = l.slots[:keep]
+	l.freeHead = -1
 }
