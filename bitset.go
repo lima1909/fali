@@ -73,11 +73,9 @@ func (b *BitSet[V]) Contains(value V) bool {
 // [1, 3, 100] => 1
 // if no max found, return -1
 func (b *BitSet[V]) Min() int {
-	bl := len(b.data)
 	bd := b.data
 
-	for i := range bl {
-		w := bd[i]
+	for i, w := range bd {
 		if w != 0 {
 			// bits.TrailingZeros64 returns the number of zero bits
 			// before the first set bit (the "1").
@@ -126,12 +124,11 @@ func (b *BitSet[V]) MaxSetIndex() int {
 
 // Counts how many values are in the BitSet, bits are set.
 func (b *BitSet[V]) Count() int {
-	bl := len(b.data)
 	bd := b.data
 	count := 0
 
-	for i := range bl {
-		count += bits.OnesCount64(bd[i])
+	for _, w := range bd {
+		count += bits.OnesCount64(w)
 	}
 
 	return count
@@ -160,14 +157,29 @@ func (b *BitSet[V]) And(other *BitSet[V]) {
 	bd := b.data
 	od := other.data
 
-	l := min(len(b.data), len(other.data))
-	for i := range l {
-		bd[i] &= od[i]
+	l := min(len(bd), len(od))
+
+	// Bounds Check Elimination
+	a := bd[:l]
+	o := od[:l]
+
+	// process 4 words (256 bits) per iteration.
+	i := 0
+	for ; i <= l-4; i += 4 {
+		a[i] &= o[i]
+		a[i+1] &= o[i+1]
+		a[i+2] &= o[i+2]
+		a[i+3] &= o[i+3]
+	}
+
+	// handle remaining elements (the tail)
+	for ; i < l; i++ {
+		a[i] &= o[i]
 	}
 
 	// remove the tail
 	// This updates the 'len', but the 'cap' (memory) remains.
-	b.data = bd[:l]
+	b.data = a
 }
 
 // Or is the logical OR of two BitSet
@@ -200,8 +212,8 @@ func (b *BitSet[V]) Or(other *BitSet[V]) {
 	}
 
 	// b is longer or equal - no growth needed
-	for i := range ol {
-		b.data[i] |= od[i]
+	for i, w := range od {
+		b.data[i] |= w
 	}
 }
 
@@ -231,8 +243,8 @@ func (b *BitSet[V]) Xor(other *BitSet[V]) {
 		copy(b.data[bl:], od[bl:])
 	} else {
 		// execute xor for ol <= bl
-		for i := range ol {
-			b.data[i] ^= od[i]
+		for i, w := range od {
+			b.data[i] ^= w
 		}
 	}
 }
@@ -242,16 +254,21 @@ func (b *BitSet[V]) Xor(other *BitSet[V]) {
 //
 // Example: [1, 2, 110, 2345] AndNot [2, 110] => [1, 2345]
 func (b *BitSet[V]) AndNot(other *BitSet[V]) {
+	bd := b.data
 	od := other.data
 
 	// we only care about the intersection.
 	// If 'other' is longer, we ignore its tail (0 &^ 1 = 0).
 	// If 'b' is longer, its tail stays the same (1 &^ 0 = 1).
-	limit := min(len(b.data), len(od))
+	l := min(len(bd), len(od))
+
+	// Bounds Check Elimination
+	a := bd[:l]
+	o := od[:l]
 
 	// perform the Bit Clear operation
-	for i := range limit {
-		b.data[i] &^= od[i]
+	for i, w := range o {
+		a[i] &^= w
 	}
 }
 
@@ -277,19 +294,27 @@ func (b *BitSet[V]) Shrink() {
 	b.data = bd[:0]
 }
 
-// ToSlice create a new slice which contains all saved values
-func (b *BitSet[V]) ToSlice() []int {
-	res := make([]int, 0, b.Count())
+// Values iterate over the complete BitSet and call the yield function, for every value
+func (b *BitSet[V]) Values(yield func(V) bool) {
 	bd := b.data
-	l := len(bd)
-
-	for i := range l {
-		w := bd[i]
+	for i, w := range bd {
 		for w != 0 {
 			t := bits.TrailingZeros64(w)
-			res = append(res, (i<<6)+t)
-			w &^= (1 << uint(t)) // Clear the bit we just found
+			val := (i << 6) + t
+			if !yield(V(val)) {
+				return
+			}
+			w &= (w - 1)
 		}
 	}
+}
+
+// ToSlice create a new slice which contains all saved values
+func (b *BitSet[V]) ToSlice() []V {
+	res := make([]V, 0, b.Count())
+	b.Values(func(v V) bool {
+		res = append(res, v)
+		return true
+	})
 	return res
 }

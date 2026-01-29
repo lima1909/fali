@@ -144,3 +144,20 @@ func TestBitSetMinMax(t *testing.T) {
 	// 0, 1
 	assert.Equal(t, 1, b.MaxSetIndex())
 }
+
+func TestBitSetValuesIter(t *testing.T) {
+	b := NewBitSet[uint8]()
+	b.Set(2)
+	b.Set(1)
+	b.Set(2)
+	b.Set(0)
+	b.Set(142)
+
+	values := make([]uint8, 0)
+	b.Values(func(v uint8) bool {
+		values = append(values, v)
+		return true
+	})
+
+	assert.Equal(t, []uint8{0, 1, 2, 142}, values)
+}
