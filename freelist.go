@@ -85,36 +85,40 @@ func (l *FreeList[T]) Get(index int) (T, bool) {
 // CompactUnstable removes not used slots. Unstable means, the Indices breaks.
 func (l *FreeList[T]) CompactUnstable() {
 	keep := 0
-	for i := 0; i < len(l.slots); i++ {
-		if l.slots[i].occupied {
-			l.slots[keep] = l.slots[i]
+	slots := l.slots
+
+	for _, s := range slots {
+		if s.occupied {
+			slots[keep] = s
 			keep++
 		}
 	}
 
-	l.slots = l.slots[:keep]
+	l.slots = slots[:keep]
 	l.freeHead = -1
 }
 
 // CompactLinear removes not used slote.
 // If an Index has changed, yout get this Info with the Callback: onMove
 func (l *FreeList[T]) CompactLinear(onMove func(oldIndex, newIndex int)) {
+	var null T
 	keep := 0
-	for i := 0; i < len(l.slots); i++ {
-		if l.slots[i].occupied {
+	slots := l.slots
+
+	for i, s := range slots {
+		if s.occupied {
 			// If the read and write pointers are different, we need to move the data
 			if i != keep {
-				l.slots[keep] = l.slots[i]
+				slots[keep] = s
 				onMove(i, keep)
 
 				// clear the old slot to prevent memory leaks
-				var null T
-				l.slots[i] = slot[T]{value: null, occupied: false, nextFree: -1}
+				slots[i] = slot[T]{value: null, occupied: false, nextFree: -1}
 			}
 			keep++
 		}
 	}
 
-	l.slots = l.slots[:keep]
+	l.slots = slots[:keep]
 	l.freeHead = -1
 }
