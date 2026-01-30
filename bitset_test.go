@@ -67,13 +67,13 @@ func TestBitSetAnd(t *testing.T) {
 	b2 := NewBitSetFrom[uint32](110)
 	result := b1.Copy()
 	result.And(b2)
-	assert.Equal(t, NewBitSetFrom[uint32](110), result)
+	assert.Equal(t, []uint32{110}, result.ToSlice())
 
 	b1 = NewBitSetFrom[uint32](110)
 	b2 = NewBitSetFrom[uint32](1, 2, 110, 2345)
 	result = b1.Copy()
 	result.And(b2)
-	assert.Equal(t, NewBitSetFrom[uint32](110), result)
+	assert.Equal(t, []uint32{110}, result.ToSlice())
 }
 
 func TestBitSetOr(t *testing.T) {
@@ -81,13 +81,27 @@ func TestBitSetOr(t *testing.T) {
 	b2 := NewBitSetFrom[uint32](110)
 	result := b1.Copy()
 	result.Or(b2)
-	assert.Equal(t, NewBitSetFrom[uint32](1, 2, 110, 2345), result)
+	assert.Equal(t, []uint32{1, 2, 110, 2345}, result.ToSlice())
 
 	b1 = NewBitSetFrom[uint32](110)
 	b2 = NewBitSetFrom[uint32](1, 2, 110, 2345)
 	result = b1.Copy()
 	result.Or(b2)
-	assert.Equal(t, NewBitSetFrom[uint32](1, 2, 110, 2345), result)
+	assert.Equal(t, []uint32{1, 2, 110, 2345}, result.ToSlice())
+}
+
+func TestBitSetOr2(t *testing.T) {
+	b1 := NewBitSetFrom[uint32](1, 2, 3)
+	b2 := NewBitSetFrom[uint32](4, 5, 6)
+	result := b1.Copy()
+	result.Or(b2)
+	assert.Equal(t, []uint32{1, 2, 3, 4, 5, 6}, result.ToSlice())
+
+	b1 = NewBitSetFrom[uint32](4, 5, 6)
+	b2 = NewBitSetFrom[uint32](1, 2, 3)
+	result = b1.Copy()
+	result.Or(b2)
+	assert.Equal(t, []uint32{1, 2, 3, 4, 5, 6}, result.ToSlice())
 }
 
 func TestBitSetXor(t *testing.T) {
@@ -95,7 +109,7 @@ func TestBitSetXor(t *testing.T) {
 	b2 := NewBitSetFrom[uint32](110)
 	result := b1.Copy()
 	result.Xor(b2)
-	assert.Equal(t, NewBitSetFrom[uint32](1, 2, 2345), result)
+	assert.Equal(t, []uint32{1, 2, 2345}, result.ToSlice())
 
 	// shrinked?
 	// assert.Equal(t, 1, result.Count())
@@ -105,7 +119,7 @@ func TestBitSetXor(t *testing.T) {
 	b2 = NewBitSetFrom[uint32](1, 2, 110, 2345)
 	result = b1.Copy()
 	result.Xor(b2)
-	assert.Equal(t, NewBitSetFrom[uint32](1, 2, 2345), result)
+	assert.Equal(t, []uint32{1, 2, 2345}, result.ToSlice())
 }
 
 func TestBitSetAndNot(t *testing.T) {
@@ -113,7 +127,7 @@ func TestBitSetAndNot(t *testing.T) {
 	b2 := NewBitSetFrom[uint64](110, 2)
 	result := b1.Copy()
 	result.AndNot(b2)
-	assert.Equal(t, NewBitSetFrom[uint64](1, 2345), result)
+	assert.Equal(t, []uint64{1, 2345}, result.ToSlice())
 
 	b1 = NewBitSetFrom[uint64](110, 2)
 	b2 = NewBitSetFrom[uint64](1, 2, 110, 2345)

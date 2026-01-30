@@ -184,69 +184,86 @@ func (b *BitSet[V]) And(other *BitSet[V]) {
 
 // Or is the logical OR of two BitSet
 func (b *BitSet[V]) Or(other *BitSet[V]) {
-	bd := b.data
 	od := other.data
 	ol := len(od)
-	bl := len(bd)
 
-	// other is longer - we must grow and handle the tail
-	if ol > bl {
-		if cap(bd) < ol {
-			// new allocation
-			newData := make([]uint64, ol)
-			copy(newData, bd)
-			b.data = newData
+	if len(b.data) < ol {
+		if cap(b.data) < ol {
+			newD := make([]uint64, ol)
+			copy(newD, b.data)
+			b.data = newD
 		} else {
-			// reuse capacity
-			b.data = bd[:ol]
+			b.data = b.data[:ol]
 		}
-
-		// only OR the overlapping part
-		for i := range bl {
-			b.data[i] |= od[i]
-		}
-		// Directly COPY the tail of 'other' into 'b'
-		// This overwrites any "ghost bits" in the reused capacity
-		copy(b.data[bl:], od[bl:])
-		return
 	}
 
-	// b is longer or equal - no growth needed
-	for i, w := range od {
-		b.data[i] |= w
+	// BCE (Bounds Check Elimination)
+	// are safe to access up to index 'ol-1'.
+	dst := b.data[:ol]
+	src := od
+
+	// unrolled Loop for the overlapping part
+	i := 0
+	for ; i <= ol-4; i += 4 {
+		dst[i] |= src[i]
+		dst[i+1] |= src[i+1]
+		dst[i+2] |= src[i+2]
+		dst[i+3] |= src[i+3]
 	}
+
+	// clean up the remainder
+	for ; i < ol; i++ {
+		dst[i] |= src[i]
+	}
+
+	// if len(b.data) was originally > ol, the rest of b.data
+	// stays exactly as it was, which is correct for an OR operation.
 }
 
 // XOr is the logical XOR of two BitSet
 func (b *BitSet[V]) Xor(other *BitSet[V]) {
-	bd := b.data
 	od := other.data
 	ol := len(od)
-	bl := len(bd)
+	bl := len(b.data)
 
-	// resize b
-	if ol > bl {
-		// Grow b to match other
-		if cap(bd) < ol {
-			newData := make([]uint64, ol)
-			copy(newData, bd)
-			b.data = newData
+	common := ol
+	if bl < ol {
+		if cap(b.data) < ol {
+			newD := make([]uint64, ol)
+			copy(newD, b.data)
+			b.data = newD
 		} else {
-			// trim to the len of ohter
-			b.data = bd[:ol]
+			b.data = b.data[:ol]
 		}
-
-		// execute xor for ol > bl
-		for i := range bl {
-			b.data[i] ^= od[i]
-		}
-		copy(b.data[bl:], od[bl:])
-	} else {
-		// execute xor for ol <= bl
-		for i, w := range od {
-			b.data[i] ^= w
-		}
+		common = bl
 	}
+
+	// setup BCE (Bounds Check Elimination)
+	// only XOR up to the 'common' length (where both have data)
+	dst := b.data[:common]
+	src := od[:common]
+
+	// unrolled Loop for the overlapping part
+	i := 0
+	for ; i <= common-4; i += 4 {
+		dst[i] ^= src[i]
+		dst[i+1] ^= src[i+1]
+		dst[i+2] ^= src[i+2]
+		dst[i+3] ^= src[i+3]
+	}
+
+	for ; i < common; i++ {
+		dst[i] ^= src[i]
+	}
+
+	// handle the Tail
+	// if other was longer than b, the tail of other should be copied into b.
+	// (Because 0 XOR Value = Value)
+	if ol > bl {
+		copy(b.data[bl:], od[bl:])
+	}
+	// Note: If b was longer than other, the tail of b remains as is.
+	// (Because Value XOR 0 = Value)
 }
 
 // AndNot removes all elements from the current set that exist in another set.
@@ -257,19 +274,27 @@ func (b *BitSet[V]) AndNot(other *BitSet[V]) {
 	bd := b.data
 	od := other.data
 
-	// we only care about the intersection.
-	// If 'other' is longer, we ignore its tail (0 &^ 1 = 0).
-	// If 'b' is longer, its tail stays the same (1 &^ 0 = 1).
 	l := min(len(bd), len(od))
-
-	// Bounds Check Elimination
+	// BCE (Bounds Check Elimination)
 	a := bd[:l]
 	o := od[:l]
 
-	// perform the Bit Clear operation
-	for i, w := range o {
-		a[i] &^= w
+	// unrolling (Process 4 words per iteration)
+	i := 0
+	for ; i <= l-4; i += 4 {
+		a[i] &^= o[i]
+		a[i+1] &^= o[i+1]
+		a[i+2] &^= o[i+2]
+		a[i+3] &^= o[i+3]
 	}
+
+	// handle remaining elements
+	for ; i < l; i++ {
+		a[i] &^= o[i]
+	}
+
+	// Note: b.data's tail beyond 'l' is left untouched.
+	// 1 &^ 0 = 1, so the bits naturally stay set.
 }
 
 // Shrink trims the bitset to ensure that len(b.data) always points to the last truly useful word.
@@ -281,17 +306,15 @@ func (b *BitSet[V]) AndNot(other *BitSet[V]) {
 // AND NOT      No	        Yes
 func (b *BitSet[V]) Shrink() {
 	bd := b.data
-	bl := len(bd)
 
-	for i := bl - 1; i >= 0; i-- {
-		if bd[i] != 0 {
-			b.data = bd[:i+1]
-			return
-		}
+	// start from the end
+	i := len(bd) - 1
+	for i >= 0 && bd[i] == 0 {
+		i--
 	}
 
-	// all data are equals 0
-	b.data = bd[:0]
+	// update length once
+	b.data = bd[:i+1]
 }
 
 // Values iterate over the complete BitSet and call the yield function, for every value

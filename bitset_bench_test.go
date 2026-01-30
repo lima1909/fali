@@ -52,6 +52,50 @@ func BenchmarkBitSetAnd(b *testing.B) {
 	}
 }
 
+func BenchmarkBitSetOr(b *testing.B) {
+	bs1 := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		if i%3 == 0 {
+			bs1.Set(uint32(i))
+		}
+	}
+	bs2 := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		if i%6 == 0 {
+			bs2.Set(uint32(i))
+		}
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		r := bs2.Copy()
+		r.Or(bs1)
+		assert.Equal(b, count/3, r.Count())
+	}
+}
+
+func BenchmarkBitSetXor(b *testing.B) {
+	bs1 := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		if i%3 == 0 {
+			bs1.Set(uint32(i))
+		}
+	}
+	bs2 := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		if i%6 == 0 {
+			bs2.Set(uint32(i))
+		}
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		r := bs2.Copy()
+		r.Xor(bs1)
+		assert.Equal(b, 500_000, r.Count())
+	}
+}
+
 func BenchmarkBitSetToSlice(b *testing.B) {
 	bs := NewBitSet[uint32]()
 	for i := 1; i <= count; i++ {
@@ -81,6 +125,19 @@ func BenchmarkBitSetValuesIter(b *testing.B) {
 		})
 
 		assert.Equal(b, count, c)
+
+	}
+}
+
+func BenchmarkBitSetShrink(b *testing.B) {
+	bs := NewBitSetWithCapacity[uint32](2000)
+	bs.Set(1)
+	bs.Set(10)
+	b.ResetTimer()
+
+	for b.Loop() {
+		bs.Shrink()
+		assert.Equal(b, 0, bs.MaxSetIndex())
 
 	}
 }
