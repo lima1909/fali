@@ -14,7 +14,7 @@ type BitSet[V Value] struct {
 
 // NewBitSet creates a new BitSet
 func NewBitSet[V Value]() *BitSet[V] {
-	return NewBitSetWithCapacity[V](0)
+	return &BitSet[V]{data: make([]uint64, 0)}
 }
 
 // NewBitSetFrom creates a new BitSet with given values
@@ -148,6 +148,22 @@ func (b *BitSet[V]) usedBytes() int {
 func (b *BitSet[V]) Copy() *BitSet[V] {
 	target := make([]uint64, len(b.data))
 	copy(target, b.data)
+	return &BitSet[V]{data: target}
+}
+
+// CopyInto copies the current BitSet into the provided buffer.
+// It returns a new BitSet wrapper sharing the provided buffer.
+// Assumption: cap(buf) >= len(b.data), if not, then panic.
+func (b *BitSet[V]) CopyInto(buf []uint64) *BitSet[V] {
+	needed := len(b.data)
+
+	if cap(buf) < needed {
+		panic("BitSet.CopyInto: buffer too small")
+	}
+
+	target := buf[:needed]
+	copy(target, b.data)
+
 	return &BitSet[V]{data: target}
 }
 

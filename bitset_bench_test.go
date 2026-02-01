@@ -141,3 +141,52 @@ func BenchmarkBitSetShrink(b *testing.B) {
 
 	}
 }
+
+func BenchmarkBitSetCopy(b *testing.B) {
+	bs := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		bs.Set(uint32(i))
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		bsCopy := bs.Copy()
+		assert.Equal(b, bsCopy, bs)
+	}
+}
+
+func BenchmarkBitSetCopyInto(b *testing.B) {
+	bs := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		bs.Set(uint32(i))
+	}
+	b.ResetTimer()
+
+	buf := make([]uint64, 0, len(bs.data))
+	for b.Loop() {
+		bsCopy := bs.CopyInto(buf)
+		assert.Equal(b, bsCopy, bs)
+	}
+}
+
+func BenchmarkBitSetCreateNew(b *testing.B) {
+	for b.Loop() {
+		// 46875
+		bs := NewBitSetWithCapacity[uint32](47000)
+		for i := 1; i <= count; i++ {
+			bs.Set(uint32(i))
+		}
+	}
+}
+
+func BenchmarkBitSetMaxSetIndex(b *testing.B) {
+	bs := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		bs.Set(uint32(i))
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		assert.Equal(b, 46875, bs.MaxSetIndex())
+	}
+}
