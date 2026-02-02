@@ -11,35 +11,23 @@ const (
 	// NotEqual       Relation = "!="
 )
 
-type IndexKey struct {
-	inum    int
-	fnum    float64
-	text    string
-	boolean bool
-}
-
-func Int(i int) IndexKey       { return IndexKey{inum: i} }
-func Float(f float64) IndexKey { return IndexKey{fnum: f} }
-func Bool(b bool) IndexKey     { return IndexKey{boolean: b} }
-func String(s string) IndexKey { return IndexKey{text: s} }
-
 type Row = Value
 
 type Index[R Row] interface {
-	Set(IndexKey, R)
-	UnSet(IndexKey, R)
-	Get(Relation, IndexKey) *BitSet[R]
+	Set(any, R)
+	UnSet(any, R)
+	Get(Relation, any) *BitSet[R]
 }
 
 type MapIndex[R Row] struct {
-	data map[IndexKey]*BitSet[R]
+	data map[any]*BitSet[R]
 }
 
 func NewMapIndex[R Row]() *MapIndex[R] {
-	return &MapIndex[R]{data: make(map[IndexKey]*BitSet[R])}
+	return &MapIndex[R]{data: make(map[any]*BitSet[R])}
 }
 
-func (idx *MapIndex[R]) Set(key IndexKey, row R) {
+func (idx *MapIndex[R]) Set(key any, row R) {
 	bs, found := idx.data[key]
 	if !found {
 		bs = NewBitSet[R]()
@@ -48,7 +36,7 @@ func (idx *MapIndex[R]) Set(key IndexKey, row R) {
 	idx.data[key] = bs
 }
 
-func (idx *MapIndex[R]) UnSet(key IndexKey, row R) {
+func (idx *MapIndex[R]) UnSet(key any, row R) {
 	if bs, found := idx.data[key]; found {
 		bs.UnSet(row)
 		if bs.Count() == 0 {
@@ -57,7 +45,7 @@ func (idx *MapIndex[R]) UnSet(key IndexKey, row R) {
 	}
 }
 
-func (idx *MapIndex[R]) Get(relation Relation, key IndexKey) *BitSet[R] {
+func (idx *MapIndex[R]) Get(relation Relation, key any) *BitSet[R] {
 	if relation != Equal {
 		return NewBitSet[R]()
 	}
@@ -77,7 +65,7 @@ type FieldIndex[R Row] map[string]Index[R]
 // and returns a BitSet pointer
 type Query[R Row] func(fi FieldIndex[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool)
 
-func Eq[R Row](key string, val IndexKey) Query[R] {
+func Eq[R Row](key string, val any) Query[R] {
 	return func(fi FieldIndex[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool) {
 		idx, ok := fi[key]
 		if !ok {
@@ -89,7 +77,7 @@ func Eq[R Row](key string, val IndexKey) Query[R] {
 }
 
 // NotEq is a shorcut for Not(Eq(...))
-func NotEq[R Row](key string, val IndexKey) Query[R] {
+func NotEq[R Row](key string, val any) Query[R] {
 	return func(fi FieldIndex[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool) {
 		eq := Eq[R](key, val)
 		return Not(eq)(fi, allIDs)
@@ -98,7 +86,7 @@ func NotEq[R Row](key string, val IndexKey) Query[R] {
 
 // In combines Eq with an Or
 // In("name", "Paul", "Egon") => name == "Paul" Or name == "Egon"
-func In[R Row](key string, vals ...IndexKey) Query[R] {
+func In[R Row](key string, vals ...any) Query[R] {
 	return func(fi FieldIndex[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool) {
 		if len(vals) == 0 {
 			return NewBitSet[R](), true

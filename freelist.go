@@ -14,14 +14,14 @@ type FreeList[T any] struct {
 	freeHead int // Index of the first free slot (-1 if none)
 }
 
-func NewFreeList[T any]() *FreeList[T] {
-	return &FreeList[T]{
+func NewFreeList[T any]() FreeList[T] {
+	return FreeList[T]{
 		slots:    make([]slot[T], 0),
 		freeHead: -1, // -1 means "No free slots, append new ones"
 	}
 }
 
-// Add an Item to the List.
+// Add an Item to the end of the List or use a free slot, to add this item
 func (l *FreeList[T]) Add(item T) int {
 	// no free slots in the list, append to the end
 	if l.freeHead == -1 {
