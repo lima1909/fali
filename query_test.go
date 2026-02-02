@@ -75,12 +75,6 @@ func TestMapIndex_Query(t *testing.T) {
 	result, _ = Eq[uint16]("bad", Int(99))(fi, nil)
 	assert.Equal(t, []uint16{}, result.ToSlice())
 
-	// Not
-	allIDs := NewBitSetFrom[uint16](1, 3, 5, 42)
-	result, canMutate = Not(Eq[uint16]("val", Int(3)))(fi, allIDs)
-	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
-
 	// OR
 	result, canMutate =
 		Eq[uint16]("val", Int(3)).
@@ -94,6 +88,67 @@ func TestMapIndex_Query(t *testing.T) {
 			And(Eq[uint16]("val", Int(3)))(fi, nil)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
+
+	// after and | or, to check the original BitSet is not changed
+	assert.Equal(t, []uint16{1}, mi.Get(Equal, Int(1)).ToSlice())
+	assert.Equal(t, []uint16{42}, mi.Get(Equal, Int(42)).ToSlice())
+	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, Int(3)).ToSlice())
+}
+
+func TestMapIndex_Query_Not(t *testing.T) {
+	mi := NewMapIndex[uint16]()
+	mi.Set(Int(1), 1)
+	mi.Set(Int(3), 3)
+	mi.Set(Int(3), 5)
+	mi.Set(Int(42), 42)
+
+	var fi FieldIndex[uint16] = map[string]Index[uint16]{
+		"val": mi,
+	}
+
+	allIDs := NewBitSetFrom[uint16](1, 3, 5, 42)
+
+	// Not
+	result, canMutate := Not(Eq[uint16]("val", Int(3)))(fi, allIDs)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
+
+	// NotEq
+	result, canMutate = NotEq[uint16]("val", Int(3))(fi, allIDs)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
+
+	// after and | or, to check the original BitSet is not changed
+	assert.Equal(t, []uint16{1}, mi.Get(Equal, Int(1)).ToSlice())
+	assert.Equal(t, []uint16{42}, mi.Get(Equal, Int(42)).ToSlice())
+	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, Int(3)).ToSlice())
+}
+
+func TestMapIndex_Query_In(t *testing.T) {
+	mi := NewMapIndex[uint16]()
+	mi.Set(Int(1), 1)
+	mi.Set(Int(3), 3)
+	mi.Set(Int(3), 5)
+	mi.Set(Int(42), 42)
+
+	var fi FieldIndex[uint16] = map[string]Index[uint16]{
+		"val": mi,
+	}
+
+	// In empty
+	result, canMutate := In[uint16]("val")(fi, nil)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint16{}, result.ToSlice())
+
+	// In one
+	result, canMutate = In[uint16]("val", Int(1))(fi, nil)
+	assert.False(t, canMutate)
+	assert.Equal(t, []uint16{1}, result.ToSlice())
+
+	// In many
+	result, canMutate = In[uint16]("val", Int(42), Int(1))(fi, nil)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
 
 	// after and | or, to check the original BitSet is not changed
 	assert.Equal(t, []uint16{1}, mi.Get(Equal, Int(1)).ToSlice())

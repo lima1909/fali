@@ -78,7 +78,7 @@ type FieldIndex[R Row] map[string]Index[R]
 type Query[R Row] func(fi FieldIndex[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool)
 
 func Eq[R Row](key string, val IndexKey) Query[R] {
-	return func(fi FieldIndex[R], _ *BitSet[R]) (*BitSet[R], bool) {
+	return func(fi FieldIndex[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool) {
 		idx, ok := fi[key]
 		if !ok {
 			return NewBitSet[R](), true
@@ -88,9 +88,45 @@ func Eq[R Row](key string, val IndexKey) Query[R] {
 	}
 }
 
+// NotEq is a shorcut for Not(Eq(...))
+func NotEq[R Row](key string, val IndexKey) Query[R] {
+	return func(fi FieldIndex[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool) {
+		eq := Eq[R](key, val)
+		return Not(eq)(fi, allIDs)
+	}
+}
+
+// In combines Eq with an Or
+// In("name", "Paul", "Egon") => name == "Paul" Or name == "Egon"
+func In[R Row](key string, vals ...IndexKey) Query[R] {
+	return func(fi FieldIndex[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool) {
+		if len(vals) == 0 {
+			return NewBitSet[R](), true
+		}
+
+		idx, ok := fi[key]
+		if !ok {
+			return NewBitSet[R](), true
+		}
+
+		bs := idx.Get(Equal, vals[0])
+		if len(vals) == 1 {
+			return bs, false
+		}
+
+		bs = bs.Copy()
+		for _, val := range vals[1:] {
+			bs.Or(idx.Get(Equal, val))
+		}
+
+		return bs, true
+	}
+}
+
 func Not[R Row](q Query[R]) Query[R] {
 	return func(fi FieldIndex[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool) {
-		qres := ensureMutable(q(fi, allIDs))
+		// can Mutate is not relevant, because allIDs are copied
+		qres, _ := q(fi, allIDs)
 
 		// maybe i can change the copy?
 		result := allIDs.Copy()
