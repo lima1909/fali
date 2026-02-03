@@ -56,8 +56,11 @@ func TestMapIndex_Query(t *testing.T) {
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	var fi FieldIndex[uint16] = map[string]Index[uint16]{
-		"val": mi,
+	fi := func(fieldName string, _ any) (Index[uint16], bool) {
+		if fieldName == "val" {
+			return mi, true
+		}
+		return nil, false
 	}
 
 	result, canMutate := Eq[uint16]("val", 3)(fi, nil)
@@ -102,8 +105,11 @@ func TestMapIndex_Query_Not(t *testing.T) {
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	var fi FieldIndex[uint16] = map[string]Index[uint16]{
-		"val": mi,
+	fi := func(fieldName string, _ any) (Index[uint16], bool) {
+		if fieldName == "val" {
+			return mi, true
+		}
+		return nil, false
 	}
 
 	allIDs := NewBitSetFrom[uint16](1, 3, 5, 42)
@@ -131,8 +137,11 @@ func TestMapIndex_Query_In(t *testing.T) {
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	var fi FieldIndex[uint16] = map[string]Index[uint16]{
-		"val": mi,
+	fi := func(fieldName string, _ any) (Index[uint16], bool) {
+		if fieldName == "val" {
+			return mi, true
+		}
+		return nil, false
 	}
 
 	// In empty
