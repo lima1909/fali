@@ -1,10 +1,20 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func fieldIndexMap(mi Index[uint16]) FieldIndexFn[uint16] {
+	return func(fieldName string, _ any) (Index[uint16], error) {
+		if fieldName == "val" {
+			return mi, nil
+		}
+		return nil, fmt.Errorf("not found: %s", fieldName)
+	}
+}
 
 func TestMapIndex_Set_UnSet(t *testing.T) {
 	mi := NewMapIndex[uint16]()
@@ -56,39 +66,41 @@ func TestMapIndex_Query(t *testing.T) {
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	fi := func(fieldName string, _ any) (Index[uint16], bool) {
-		if fieldName == "val" {
-			return mi, true
-		}
-		return nil, false
-	}
+	fi := fieldIndexMap(mi)
 
-	result, canMutate := Eq[uint16]("val", 3)(fi, nil)
+	result, canMutate, err := Eq[uint16]("val", 3)(fi, nil)
+	assert.NoError(t, err)
 	assert.False(t, canMutate)
 	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
 
 	// repeat the Eq with the same paramter, to check the result BitSet is not changed
-	result, _ = Eq[uint16]("val", 3)(fi, nil)
+	result, _, err = Eq[uint16]("val", 3)(fi, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
 
 	// not found
-	result, _ = Eq[uint16]("val", 99)(fi, nil)
+	result, _, err = Eq[uint16]("val", 99)(fi, nil)
+	// test function doesn't throw an error!
+	assert.NoError(t, err)
 	assert.Equal(t, []uint16{}, result.ToSlice())
 	// invalid field
-	result, _ = Eq[uint16]("bad", 99)(fi, nil)
-	assert.Equal(t, []uint16{}, result.ToSlice())
+	result, _, err = Eq[uint16]("bad", 99)(fi, nil)
+	assert.Error(t, err)
+	assert.Nil(t, result)
 
 	// OR
-	result, canMutate =
+	result, canMutate, err =
 		Eq[uint16]("val", 3).
 			Or(Eq[uint16]("val", 1))(fi, nil)
+	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{1, 3, 5}, result.ToSlice())
 
 	// And
-	result, canMutate =
+	result, canMutate, err =
 		Eq[uint16]("val", 3).
 			And(Eq[uint16]("val", 3))(fi, nil)
+	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
 
@@ -105,22 +117,19 @@ func TestMapIndex_Query_Not(t *testing.T) {
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	fi := func(fieldName string, _ any) (Index[uint16], bool) {
-		if fieldName == "val" {
-			return mi, true
-		}
-		return nil, false
-	}
+	fi := fieldIndexMap(mi)
 
 	allIDs := NewBitSetFrom[uint16](1, 3, 5, 42)
 
 	// Not
-	result, canMutate := Not(Eq[uint16]("val", 3))(fi, allIDs)
+	result, canMutate, err := Not(Eq[uint16]("val", 3))(fi, allIDs)
+	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
 
 	// NotEq
-	result, canMutate = NotEq[uint16]("val", 3)(fi, allIDs)
+	result, canMutate, err = NotEq[uint16]("val", 3)(fi, allIDs)
+	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
 
@@ -137,25 +146,23 @@ func TestMapIndex_Query_In(t *testing.T) {
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	fi := func(fieldName string, _ any) (Index[uint16], bool) {
-		if fieldName == "val" {
-			return mi, true
-		}
-		return nil, false
-	}
+	fi := fieldIndexMap(mi)
 
 	// In empty
-	result, canMutate := In[uint16]("val")(fi, nil)
+	result, canMutate, err := In[uint16]("val")(fi, nil)
+	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{}, result.ToSlice())
 
 	// In one
-	result, canMutate = In[uint16]("val", 1)(fi, nil)
+	result, canMutate, err = In[uint16]("val", 1)(fi, nil)
+	assert.NoError(t, err)
 	assert.False(t, canMutate)
 	assert.Equal(t, []uint16{1}, result.ToSlice())
 
 	// In many
-	result, canMutate = In[uint16]("val", 42, 1)(fi, nil)
+	result, canMutate, err = In[uint16]("val", 42, 1)(fi, nil)
+	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
 

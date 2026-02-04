@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"sync"
 )
 
@@ -32,8 +33,12 @@ func (l *IndexList[T]) Add(item T) int {
 
 	for name, fieldIndex := range l.fieldIndexMap {
 		val := fieldIndex.fieldFn(&item)
-		fieldIndex.resultType = typeID(&val)
-		l.fieldIndexMap[name] = fieldIndex
+
+		// safe the type of val to validate it before executing the Query
+		if fieldIndex.fieldFnResultType == nil {
+			fieldIndex.fieldFnResultType = reflect.TypeOf(val)
+			l.fieldIndexMap[name] = fieldIndex
+		}
 
 		fieldIndex.index.Set(val, uint32(row))
 	}
@@ -41,16 +46,20 @@ func (l *IndexList[T]) Add(item T) int {
 	return row
 }
 
-func (l *IndexList[T]) Query(q Query[uint32]) int {
+func (l *IndexList[T]) Query(query Query[uint32]) (int, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	bs, _ := q(l.fieldIndexMap.IndexByName, &l.allIDs)
+	bs, _, err := query(l.fieldIndexMap.IndexByName, &l.allIDs)
+	if err != nil {
+		return 0, err
+	}
+
 	count := 0
 	bs.Values(func(v uint32) bool {
 		count++
 		return true
 	})
 
-	return count
+	return count, nil
 }
