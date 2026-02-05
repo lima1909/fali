@@ -171,3 +171,17 @@ func TestMapIndex_Query_In(t *testing.T) {
 	assert.Equal(t, []uint16{42}, mi.Get(Equal, 42).ToSlice())
 	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, 3).ToSlice())
 }
+
+func TestMapIndex_QueryAll(t *testing.T) {
+	mi := NewMapIndex[uint16]()
+	mi.Set(1, 1)
+	mi.Set(3, 3)
+	mi.Set(3, 5)
+	mi.Set(42, 42)
+
+	fi := fieldIndexMap(mi)
+	result, canMutate, err := All[uint16]()(fi, NewBitSetFrom[uint16](1, 3, 5, 42))
+	assert.NoError(t, err)
+	assert.False(t, canMutate)
+	assert.Equal(t, []uint16{1, 3, 5, 42}, result.ToSlice())
+}

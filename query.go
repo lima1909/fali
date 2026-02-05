@@ -7,6 +7,13 @@ type FieldIndexFn[R Row] = func(string, any) (Index[R], error)
 // and returns a BitSet pointer
 type Query[R Row] func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error)
 
+// All means returns all Items, no filtering
+func All[R Row]() Query[R] {
+	return func(_ FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+		return allIDs, false, nil
+	}
+}
+
 // Eq fieldName = val
 func Eq[R Row](fieldName string, val any) Query[R] {
 	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
