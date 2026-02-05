@@ -131,6 +131,7 @@ func TestIndexList_Remove(t *testing.T) {
 	assert.Equal(t, c, car{name: "Dacia", age: 22})
 	// try to find item on index 3
 	qr, err = il.Query(Eq[uint32]("name", "Dacia").And(Eq[uint32]("age", uint8(22))))
+	assert.NoError(t, err)
 	assert.Equal(t, 0, qr.Count())
 
 	_, removed = il.Remove(99)

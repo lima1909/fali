@@ -78,13 +78,6 @@ func (l *IndexList[T]) Remove(index int) (t T, removed bool) {
 	return item, removed
 }
 
-func (l *IndexList[T]) Count() int {
-	l.lock.RLock()
-	defer l.lock.RUnlock()
-
-	return l.allIDs.Count()
-}
-
 // Query execute the given Query.
 func (l *IndexList[T]) Query(query Query[uint32]) (QueryResult[T], error) {
 	l.lock.RLock()
@@ -96,6 +89,14 @@ func (l *IndexList[T]) Query(query Query[uint32]) (QueryResult[T], error) {
 	}
 
 	return QueryResult[T]{bitSet: *bs, list: l}, nil
+}
+
+// Count the Items, which in this list exist
+func (l *IndexList[T]) Count() int {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	return l.allIDs.Count()
 }
 
 type QueryResult[T any] struct {
