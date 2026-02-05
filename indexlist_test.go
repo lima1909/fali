@@ -31,7 +31,7 @@ func TestIndexList_Base(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, car{name: "Opel", age: 22}, c)
 
-	c, found = il.Get(99)
+	_, found = il.Get(99)
 	assert.False(t, found)
 
 	qr, err := il.Query(Eq[uint32]("name", "Opel"))
@@ -70,9 +70,7 @@ func TestIndexList_QueryResult(t *testing.T) {
 
 	il := NewIndexList[car]()
 	il.fieldIndexMap = FieldIndexMap[car, uint32]{
-		"name":  {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.name }},
-		"age":   {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.age }},
-		"isnew": {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.isNew }},
+		"age": {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.age }},
 	}
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
@@ -105,4 +103,52 @@ func TestIndexList_QueryResult(t *testing.T) {
 	},
 		qr.Sort(less),
 	)
+}
+
+func TestIndexList_Remove(t *testing.T) {
+	il := NewIndexList[car]()
+	il.fieldIndexMap = FieldIndexMap[car, uint32]{
+		"name": {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.name }},
+		"age":  {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.age }},
+	}
+
+	il.Add(car{name: "Mercedes", age: 22, color: "red"})
+	il.Add(car{name: "Opel", age: 22})
+	il.Add(car{name: "Dacia", age: 5, isNew: true})
+	il.Add(car{name: "Dacia", age: 22})
+	il.Add(car{name: "Audi", age: 22})
+
+	qr, err := il.Query(All[uint32]())
+	assert.NoError(t, err)
+
+	assert.False(t, qr.Empty())
+	assert.Equal(t, 5, qr.Count())
+
+	// remove item on index 3
+	c, removed := il.Remove(3)
+	assert.True(t, removed)
+	assert.Equal(t, 4, il.Count())
+	assert.Equal(t, c, car{name: "Dacia", age: 22})
+	// try to find item on index 3
+	qr, err = il.Query(Eq[uint32]("name", "Dacia").And(Eq[uint32]("age", uint8(22))))
+	assert.Equal(t, 0, qr.Count())
+
+	_, removed = il.Remove(99)
+	assert.False(t, removed)
+
+	qr, err = il.Query(Eq[uint32]("name", "Dacia"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, qr.Count())
+	assert.Equal(t, []car{{name: "Dacia", age: 5, isNew: true}}, qr.Values())
+
+	qr, err = il.Query(Eq[uint32]("age", uint8(22)))
+	assert.NoError(t, err)
+	assert.Equal(t, 3, qr.Count())
+
+	assert.Equal(t, 3, qr.Remove())
+	assert.Equal(t, 1, il.Count())
+
+	c, found := il.Get(2)
+	assert.True(t, found)
+	assert.Equal(t, car{name: "Dacia", age: 5, isNew: true}, c)
 }

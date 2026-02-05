@@ -25,6 +25,15 @@ func NewIndexList[T any]() *IndexList[T] {
 	}
 }
 
+// Get return a Item for a given index, if an Item exist for this index.
+// Otherwise is found = false.
+func (l *IndexList[T]) Get(index int) (t T, found bool) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	return l.list.Get(index)
+}
+
 // Add add the given Item to the list,
 // there is NO check, for existing this Item in the list
 func (l *IndexList[T]) Add(item T) int {
@@ -49,13 +58,31 @@ func (l *IndexList[T]) Add(item T) int {
 	return row
 }
 
-// Get return a Item for a given index, if an Item exist for this index.
-// Otherwise is found = false.
-func (l *IndexList[T]) Get(index int) (t T, found bool) {
+func (l *IndexList[T]) Remove(index int) (t T, removed bool) {
+	item, found := l.Get(index)
+	if !found {
+		return item, found
+	}
+
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	removed = l.list.Remove(index)
+	l.allIDs.UnSet(uint32(index))
+
+	for _, fieldIndex := range l.fieldIndexMap {
+		val := fieldIndex.fieldFn(&item)
+		fieldIndex.index.UnSet(val, uint32(index))
+	}
+
+	return item, removed
+}
+
+func (l *IndexList[T]) Count() int {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	return l.list.Get(index)
+	return l.allIDs.Count()
 }
 
 // Query execute the given Query.
@@ -100,4 +127,16 @@ func (q *QueryResult[T]) Sort(less func(*T, *T) bool) []T {
 	list := q.Values()
 	sort.Slice(list, func(i, j int) bool { return less(&list[i], &list[j]) })
 	return list
+}
+
+func (q *QueryResult[T]) Remove() int {
+	count := 0
+	q.bitSet.Values(func(r uint32) bool {
+		if _, removed := q.list.Remove(int(r)); removed {
+			count++
+		}
+		return true
+	})
+
+	return count
 }
