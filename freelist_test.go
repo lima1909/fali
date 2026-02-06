@@ -91,3 +91,36 @@ func TestFreeListCompactLinear(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "f", val)
 }
+
+func TestFreeList_Iter(t *testing.T) {
+	l := NewFreeList[string]()
+	assert.Equal(t, 0, l.Add("a"))
+	assert.Equal(t, 1, l.Add("b"))
+	assert.Equal(t, 2, l.Add("c"))
+
+	for idx, item := range l.Iter() {
+		switch idx {
+		case 0:
+			assert.Equal(t, "a", item)
+		case 1:
+			assert.Equal(t, "b", item)
+		case 2:
+			assert.Equal(t, "c", item)
+		default:
+			assert.Failf(t, "invalid", "idx: %v", idx)
+		}
+	}
+
+	// remove one item in the middle
+	assert.True(t, l.Remove(1))
+	for idx, item := range l.Iter() {
+		switch idx {
+		case 0:
+			assert.Equal(t, "a", item)
+		case 2:
+			assert.Equal(t, "c", item)
+		default:
+			assert.Failf(t, "invalid", "idx: %v", idx)
+		}
+	}
+}

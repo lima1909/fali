@@ -27,7 +27,7 @@ jobs:
 
       - name: Run Tests 
         run: |
-          go test -v -race  ./...
+          go test -v -race -shuffle=on ./...
 
       - name: Run golangci-lint manually
         run: |

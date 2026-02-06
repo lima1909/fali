@@ -16,16 +16,16 @@ type car struct {
 
 func TestIndexList_Base(t *testing.T) {
 	il := NewIndexList[car]()
-	il.fieldIndexMap = FieldIndexMap[car, uint32]{
-		"name":  {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.name }},
-		"age":   {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.age }},
-		"isnew": {index: NewMapIndex[uint32](), fieldFn: func(c *car) any { return c.isNew }},
-	}
+
+	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
+	il.CreateIndex("isnew", func(c *car) any { return c.isNew }, NewMapIndex[uint32]())
 
 	il.Add(car{name: "Dacia", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
 	il.Add(car{name: "Mercedes", age: 5, isNew: true})
 	il.Add(car{name: "Dacia", age: 22})
+
+	il.CreateIndex("age", func(c *car) any { return c.age }, NewMapIndex[uint32]())
 
 	c, found := il.Get(1)
 	assert.True(t, found)
@@ -152,4 +152,22 @@ func TestIndexList_Remove(t *testing.T) {
 	c, found := il.Get(2)
 	assert.True(t, found)
 	assert.Equal(t, car{name: "Dacia", age: 5, isNew: true}, c)
+}
+
+func TestIndexList_CreateIndex(t *testing.T) {
+	il := NewIndexList[car]()
+	il.Add(car{name: "Dacia", age: 22, color: "red"})
+	il.Add(car{name: "Opel", age: 22})
+	il.Add(car{name: "Mercedes", age: 5, isNew: true})
+	il.Add(car{name: "Dacia", age: 22})
+
+	_, err := il.Query(Eq[uint32]("name", "Opel"))
+	assert.Error(t, err)
+	assert.Equal(t, "could not found index for field name: name", err.Error())
+
+	// create Index for name
+	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
+	qr, err := il.Query(Eq[uint32]("name", "Opel"))
+	assert.Equal(t, 1, qr.Count())
+	assert.Equal(t, []car{{name: "Opel", age: 22}}, qr.Values())
 }

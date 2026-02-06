@@ -5,15 +5,19 @@ import (
 	"reflect"
 )
 
+type FieldGetFn[T any] = func(*T) any
+
 func NewFieldIndexMap[T any, R Row]() FieldIndexMap[T, R] {
 	return make(FieldIndexMap[T, R], 0)
 }
 
-type FieldIndexMap[T any, R Row] map[string]struct {
+type FieldIndex[T any, R Row] struct {
 	index             Index[R]
-	fieldFn           func(*T) any
+	fieldFn           FieldGetFn[T]
 	fieldFnResultType reflect.Type
 }
+
+type FieldIndexMap[T any, R Row] map[string]FieldIndex[T, R]
 
 // IndexByName is the default impl for the FieldIndexFn
 func (f FieldIndexMap[T, R]) IndexByName(fieldName string, val any) (Index[R], error) {

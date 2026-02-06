@@ -34,14 +34,33 @@ func (l *IndexList[T]) Get(index int) (t T, found bool) {
 	return l.list.Get(index)
 }
 
+// CreateIndex create a new Index:
+//   - fieldName: a name for a field of the saved Item
+//   - fieldGetFn: a function, which returns the value of an field
+//   - Index: a impl of the Index interface
+func (l *IndexList[T]) CreateIndex(fieldName string, fieldGetFn FieldGetFn[T], index Index[uint32]) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	fieldIndex := FieldIndex[T, uint32]{index: index, fieldFn: fieldGetFn}
+
+	for idx, item := range l.list.Iter() {
+		val := fieldIndex.fieldFn(&item)
+		fieldIndex.fieldFnResultType = reflect.TypeOf(val)
+		fieldIndex.index.Set(val, uint32(idx))
+	}
+
+	l.fieldIndexMap[fieldName] = fieldIndex
+}
+
 // Add add the given Item to the list,
 // there is NO check, for existing this Item in the list
 func (l *IndexList[T]) Add(item T) int {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	row := l.list.Add(item)
-	l.allIDs.Set(uint32(row))
+	idx := l.list.Add(item)
+	l.allIDs.Set(uint32(idx))
 
 	for name, fieldIndex := range l.fieldIndexMap {
 		val := fieldIndex.fieldFn(&item)
@@ -52,10 +71,10 @@ func (l *IndexList[T]) Add(item T) int {
 			l.fieldIndexMap[name] = fieldIndex
 		}
 
-		fieldIndex.index.Set(val, uint32(row))
+		fieldIndex.index.Set(val, uint32(idx))
 	}
 
-	return row
+	return idx
 }
 
 func (l *IndexList[T]) Remove(index int) (t T, removed bool) {

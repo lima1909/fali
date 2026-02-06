@@ -1,5 +1,7 @@
 package main
 
+import "iter"
+
 // Slot holds the data or the pointer to the next free space
 type slot[T any] struct {
 	value    T
@@ -80,6 +82,19 @@ func (l *FreeList[T]) Get(index int) (T, bool) {
 	}
 
 	return slot.value, true
+}
+
+// Iter create an Iterator, to iterate over all saved Indices and Items
+func (l *FreeList[T]) Iter() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		for i, item := range l.slots {
+			if item.occupied {
+				if !yield(i, item.value) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // CompactUnstable removes not used slots. Unstable means, the Indices breaks.
