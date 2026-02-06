@@ -17,18 +17,18 @@ func NewBitSet[V Value]() *BitSet[V] {
 	return &BitSet[V]{data: make([]uint64, 0)}
 }
 
-// NewBitSetFrom creates a new BitSet with given values
+// NewBitSetWithCapacity creates a new BitSet with starting capacity
+func NewBitSetWithCapacity[V Value](size int) *BitSet[V] {
+	return &BitSet[V]{data: make([]uint64, 0, size)}
+}
+
+// NewBitSetFrom creates a new BitSet from given values
 func NewBitSetFrom[V Value](values ...V) *BitSet[V] {
 	b := NewBitSetWithCapacity[V](len(values))
 	for _, v := range values {
 		b.Set(v)
 	}
 	return b
-}
-
-// NewBitSetWithCapacity creates a new BitSet with starting capacity
-func NewBitSetWithCapacity[V Value](size int) *BitSet[V] {
-	return &BitSet[V]{data: make([]uint64, size)}
 }
 
 // Set inserts or updates the key in the BitSet
@@ -50,7 +50,7 @@ func (b *BitSet[V]) Set(value V) {
 	// i&63 is the same: i%64, but faster
 }
 
-// Delete removes the key from the BitSet. Clear the bit value to 0.
+// UnSet removes the key from the BitSet. Clear the bit value to 0.
 func (b *BitSet[V]) UnSet(value V) bool {
 	if int(value)>>6 >= len(b.data) {
 		return false
