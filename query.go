@@ -14,6 +14,18 @@ func All[R Row]() Query[R] {
 	}
 }
 
+// Rel fieldName rel (Equal, Less, ...) val
+func Rel[R Row](fieldName string, relation Relation, val any) Query[R] {
+	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+		idx, err := fi(fieldName, val)
+		if err != nil {
+			return nil, false, err
+		}
+
+		return idx.Get(relation, val), false, nil
+	}
+}
+
 // Eq fieldName = val
 func Eq[R Row](fieldName string, val any) Query[R] {
 	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {

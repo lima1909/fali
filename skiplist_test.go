@@ -150,31 +150,71 @@ func TestNotInRange(t *testing.T) {
 	assert.Equal(t, 0, len(result))
 }
 
-func TestMin(t *testing.T) {
+func TestFirstValue(t *testing.T) {
 	sl := NewSkipList[uint32, uint32]()
-	val, ok := sl.Min()
+	val, ok := sl.FirstValue()
 	assert.False(t, ok)
 	assert.Equal(t, uint32(0), val)
 
 	sl.Put(1, 1)
-	val, ok = sl.Min()
+	val, ok = sl.FirstValue()
 	assert.True(t, ok)
 	assert.Equal(t, uint32(1), val)
 }
 
-func TestMax(t *testing.T) {
+func TestLastValue(t *testing.T) {
 	sl := NewSkipList[uint32, uint32]()
-	val, ok := sl.Max()
+	val, ok := sl.LastValue()
 	assert.False(t, ok)
 	assert.Equal(t, uint32(0), val)
 
 	sl.Put(1, 1)
-	val, ok = sl.Max()
+	val, ok = sl.LastValue()
 	assert.True(t, ok)
 	assert.Equal(t, uint32(1), val)
 
 	sl.Put(5, 5)
-	val, ok = sl.Max()
+	val, ok = sl.LastValue()
 	assert.True(t, ok)
 	assert.Equal(t, uint32(5), val)
+}
+
+func TestMinKey(t *testing.T) {
+	sl := NewSkipList[int, uint32]()
+	sl.Put(1, 2)
+	sl.Put(3, 4)
+
+	k, found := sl.MinKey()
+	assert.True(t, found)
+	assert.Equal(t, 1, k)
+
+	sl.Delete(1)
+	k, found = sl.MinKey()
+	assert.True(t, found)
+	assert.Equal(t, 3, k)
+
+	sl.Delete(3)
+	k, found = sl.MinKey()
+	assert.False(t, found)
+	assert.Equal(t, 0, k)
+}
+
+func TestMaxKey(t *testing.T) {
+	sl := NewSkipList[int, uint32]()
+	sl.Put(1, 2)
+	sl.Put(3, 4)
+
+	k, found := sl.MaxKey()
+	assert.True(t, found)
+	assert.Equal(t, 3, k)
+
+	sl.Delete(3)
+	k, found = sl.MaxKey()
+	assert.True(t, found)
+	assert.Equal(t, 1, k)
+
+	sl.Delete(1)
+	k, found = sl.MaxKey()
+	assert.False(t, found)
+	assert.Equal(t, 0, k)
 }

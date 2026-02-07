@@ -50,12 +50,31 @@ func (sl *SkipList[K, V]) randomLevel() byte {
 }
 
 // NewSkipList creates a new SkipList
-func NewSkipList[K cmp.Ordered, V any]() *SkipList[K, V] {
-	return &SkipList[K, V]{
+func NewSkipList[K cmp.Ordered, V any]() SkipList[K, V] {
+	return SkipList[K, V]{
 		head:  &node[K, V]{level: maxLevel},
 		level: 1,
 		rnd:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
+}
+
+// Get returns value and whether it exists
+func (sl *SkipList[K, V]) Get(key K) (V, bool) {
+	x := sl.head
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
+			x = next
+		}
+	}
+
+	x = x.next[0]
+	if x != nil && x.key == key {
+		// key found
+		return x.value, true
+	}
+
+	var zeroVal V
+	return zeroVal, false
 }
 
 // Put inserts or updates a key with the given value.
@@ -189,27 +208,42 @@ func (sl *SkipList[K, V]) Range(from, to K, visit VisitFn[K, V]) {
 	}
 }
 
-// Get returns value and whether it exists
-func (sl *SkipList[K, V]) Get(key K) (V, bool) {
+// MinKey returns the first (smallest) Key
+// or the zero value and false, if the list is empty.
+func (sl *SkipList[K, V]) MinKey() (K, bool) {
+	// The first node on the bottom level (level 0) is the minimum
+	first := sl.head.next[0]
+	if first == nil {
+		var zero K
+		return zero, false
+	}
+
+	return first.key, true
+}
+
+// MaxKey returns the last (biggest) Key
+// or the zero value and false, if the list is empty.
+func (sl *SkipList[K, V]) MaxKey() (K, bool) {
 	x := sl.head
+	// start at the highest lane and jump as far right as possible
 	for i := int(sl.level) - 1; i >= 0; i-- {
-		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
-			x = next
+		for x.next[i] != nil {
+			x = x.next[i]
 		}
 	}
 
-	x = x.next[0]
-	if x != nil && x.key == key {
-		// key found
-		return x.value, true
+	// list is empty
+	if x == sl.head {
+		var zero K
+		return zero, false
 	}
 
-	var zeroVal V
-	return zeroVal, false
+	return x.key, true
 }
 
-// Min returns the value associated with the smallest key in the list.
-func (sl *SkipList[K, V]) Min() (V, bool) {
+// FirstValue returns the value associated with the smallest key
+// or the zero value and false, if the list is empty.
+func (sl *SkipList[K, V]) FirstValue() (V, bool) {
 	// The first node on the bottom level (level 0) is the minimum
 	first := sl.head.next[0]
 	if first == nil {
@@ -220,8 +254,9 @@ func (sl *SkipList[K, V]) Min() (V, bool) {
 	return first.value, true
 }
 
-// Max returns the value associated with the largest key in the list O(log n).
-func (sl *SkipList[K, V]) Max() (V, bool) {
+// LastValue returns the value associated with the largest key
+// or the zero value and false, if the list is empty.
+func (sl *SkipList[K, V]) LastValue() (V, bool) {
 	x := sl.head
 	// start at the highest lane and jump as far right as possible
 	for i := int(sl.level) - 1; i >= 0; i-- {
