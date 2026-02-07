@@ -7,21 +7,21 @@ import (
 )
 
 func TestSortedIndex_Equal(t *testing.T) {
-	si := NewSortedIndex[uint16]()
-	si.Set(1, 1)
-	si.Set(1, 2)
-	si.Set(3, 3)
+	si := NewSortedIndex[string, uint16]()
+	si.Set("a", 1)
+	si.Set("a", 2)
+	si.Set("b", 3)
 
-	assert.Equal(t, []uint16{1, 2}, si.Get(Equal, 1).ToSlice())
+	assert.Equal(t, []uint16{1, 2}, si.Get(Equal, "a").ToSlice())
 
-	si.UnSet(1, 2)
-	assert.Equal(t, []uint16{1}, si.Get(Equal, 1).ToSlice())
-	si.UnSet(1, 1)
-	assert.Equal(t, []uint16{}, si.Get(Equal, 1).ToSlice())
+	si.UnSet("a", 2)
+	assert.Equal(t, []uint16{1}, si.Get(Equal, "a").ToSlice())
+	si.UnSet("a", 1)
+	assert.Equal(t, []uint16{}, si.Get(Equal, "a").ToSlice())
 }
 
 func TestSortedIndex_Less(t *testing.T) {
-	si := NewSortedIndex[uint16]()
+	si := NewSortedIndex[int, uint16]()
 	si.Set(1, 1)
 	si.Set(1, 2)
 	si.Set(3, 3)
@@ -35,7 +35,7 @@ func TestSortedIndex_Less(t *testing.T) {
 }
 
 func TestSortedIndex_LessEqual(t *testing.T) {
-	si := NewSortedIndex[uint16]()
+	si := NewSortedIndex[int, uint16]()
 	si.Set(1, 1)
 	si.Set(1, 2)
 	si.Set(3, 3)

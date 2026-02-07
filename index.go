@@ -93,54 +93,41 @@ func (mi *MapIndex[R]) Get(relation Relation, value any) *BitSet[R] {
 	return bs
 }
 
-// ------------------------
-type Uint8SortedIndex[R Row] SortedIndex[uint8, R]
-
-func NewUint8SortedIndex[R Row]() *Uint8SortedIndex[R] {
-	return &Uint8SortedIndex[R]{skipList: NewSkipList[uint8, *BitSet[R]]()}
-}
-func (si *Uint8SortedIndex[R]) Set(value any, row R)   { Set(&si.skipList, value.(uint8), row) }
-func (si *Uint8SortedIndex[R]) UnSet(value any, row R) { UnSet(&si.skipList, value.(uint8), row) }
-func (si *Uint8SortedIndex[R]) Get(relation Relation, value any) *BitSet[R] {
-	return Get(&si.skipList, relation, value.(uint8))
-}
-
-// ------------------------
 // SortedIndex is well suited for Queries with: Range, Min, Max, Greater and Less
+func NewSortedIndex[K cmp.Ordered, R Row]() Index[R] {
+	return &SortedIndex[K, R]{skipList: NewSkipList[K, *BitSet[R]]()}
+}
+
 type SortedIndex[K cmp.Ordered, R Row] struct{ skipList SkipList[K, *BitSet[R]] }
 
-func NewSortedIndex[R Row]() *SortedIndex[uint, R] {
-	return &SortedIndex[uint, R]{skipList: NewSkipList[uint, *BitSet[R]]()}
+func (si *SortedIndex[K, R]) Set(value any, row R)   { set(&si.skipList, value, row) }
+func (si *SortedIndex[K, R]) UnSet(value any, row R) { unSet(&si.skipList, value, row) }
+func (si *SortedIndex[K, R]) Get(relation Relation, value any) *BitSet[R] {
+	return get(&si.skipList, relation, value)
 }
 
-func (si SortedIndex[K, R]) Set(value K, row R)   { Set(&si.skipList, value, row) }
-func (si SortedIndex[K, R]) UnSet(value K, row R) { UnSet(&si.skipList, value, row) }
-func (si SortedIndex[K, R]) Get(relation Relation, value K) *BitSet[R] {
-	return Get(&si.skipList, relation, value)
-}
-
-func Set[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], value K, row R) {
-	bs, found := skipList.Get(value)
+func set[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], value any, row R) {
+	bs, found := skipList.Get(value.(K))
 	if !found {
 		bs = NewBitSet[R]()
 	}
 	bs.Set(row)
-	skipList.Put(value, bs)
+	skipList.Put(value.(K), bs)
 }
 
-func UnSet[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], value K, row R) {
-	if bs, found := skipList.Get(value); found {
+func unSet[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], value any, row R) {
+	if bs, found := skipList.Get(value.(K)); found {
 		bs.UnSet(row)
 		if bs.Count() == 0 {
-			skipList.Delete(value)
+			skipList.Delete(value.(K))
 		}
 	}
 }
 
-func Get[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], relation Relation, value K) *BitSet[R] {
+func get[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], relation Relation, value any) *BitSet[R] {
 	switch relation {
 	case Equal:
-		bs, found := skipList.Get(value)
+		bs, found := skipList.Get(value.(K))
 		if !found {
 			return NewBitSet[R]()
 		}
@@ -152,7 +139,7 @@ func Get[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], relation Relat
 		}
 
 		result := NewBitSet[R]()
-		skipList.Range(minValue, value, func(key K, bs *BitSet[R]) bool {
+		skipList.Range(minValue, value.(K), func(key K, bs *BitSet[R]) bool {
 			if key == value {
 				return false
 			}
@@ -169,7 +156,7 @@ func Get[K cmp.Ordered, R Row](skipList *SkipList[K, *BitSet[R]], relation Relat
 		}
 
 		result := NewBitSet[R]()
-		skipList.Range(minValue, value, func(key K, bs *BitSet[R]) bool {
+		skipList.Range(minValue, value.(K), func(key K, bs *BitSet[R]) bool {
 			result.Or(bs)
 			return true
 		})

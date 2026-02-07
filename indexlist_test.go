@@ -167,7 +167,7 @@ func TestIndexList_CreateIndex(t *testing.T) {
 func TestIndexList_CreateIndexVarious(t *testing.T) {
 	il := NewIndexList[car]()
 	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
-	il.CreateIndex("age", func(c *car) any { return c.age }, NewUint8SortedIndex[uint32]())
+	il.CreateIndex("age", func(c *car) any { return c.age }, NewSortedIndex[uint8, uint32]())
 
 	il.Add(car{name: "Dacia", age: 2, color: "red"})
 	il.Add(car{name: "Opel", age: 12})
