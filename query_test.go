@@ -1,23 +1,23 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func fieldIndexMap(mi Index[uint16]) FieldIndexFn[uint16] {
-	return func(fieldName string, _ any) (Index[uint16], error) {
+func fieldIndexMap(mi Index32[int]) FieldIndexFn[uint32] {
+	return func(fieldName string, _ any) (QueryFieldGetFn[uint32], error) {
 		if fieldName == "val" {
-			return mi, nil
+			return mi.Get, nil
 		}
-		return nil, fmt.Errorf("not found: %s", fieldName)
+
+		return nil, ErrInvalidIndexdName{fieldName}
 	}
 }
 
 func TestMapIndex_Set_UnSet(t *testing.T) {
-	mi := NewMapIndex[uint16]()
+	mi := NewMapIndex(func(t int) int { return t })
 	mi.Set(1, 1)
 	mi.Set(3, 3)
 	mi.Set(3, 5)
@@ -44,23 +44,27 @@ func TestMapIndex_Set_UnSet(t *testing.T) {
 }
 
 func TestMapIndex_Get(t *testing.T) {
-	mi := NewMapIndex[uint16]()
+	mi := NewMapIndex(func(t int) int { return t })
 	mi.Set(1, 1)
 	mi.Set(3, 3)
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
-	assert.Equal(t, NewBitSetFrom[uint16](1), mi.Get(Equal, 1))
-	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, 3).ToSlice())
+	bs, _ := mi.Get(Equal, 1)
+	assert.Equal(t, NewBitSetFrom[uint32](1), bs)
+	bs, _ = mi.Get(Equal, 3)
+	assert.Equal(t, []uint32{3, 5}, bs.ToSlice())
 
 	// not found
-	assert.Equal(t, NewBitSet[uint16](), mi.Get(Equal, 99))
+	_, err := mi.Get(Equal, 7)
+	assert.ErrorIs(t, ErrValueNotFound{7}, err)
 	// invalid relation
-	assert.Equal(t, NewBitSet[uint16](), mi.Get(Greater, 1))
+	_, err = mi.Get(Greater, 1)
+	assert.ErrorIs(t, ErrInvalidRelation{Greater}, err)
 }
 
 func TestMapIndex_Query(t *testing.T) {
-	mi := NewMapIndex[uint16]()
+	mi := NewMapIndex(func(t int) int { return t })
 	mi.Set(1, 1)
 	mi.Set(3, 3)
 	mi.Set(3, 5)
@@ -68,50 +72,53 @@ func TestMapIndex_Query(t *testing.T) {
 
 	fi := fieldIndexMap(mi)
 
-	result, canMutate, err := Eq[uint16]("val", 3)(fi, nil)
+	result, canMutate, err := Eq("val", 3)(fi, nil)
 	assert.NoError(t, err)
 	assert.False(t, canMutate)
-	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
+	assert.Equal(t, []uint32{3, 5}, result.ToSlice())
 
 	// repeat the Eq with the same paramter, to check the result BitSet is not changed
-	result, _, err = Eq[uint16]("val", 3)(fi, nil)
+	result, _, err = Eq("val", 3)(fi, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
+	assert.Equal(t, []uint32{3, 5}, result.ToSlice())
 
 	// not found
-	result, _, err = Eq[uint16]("val", 99)(fi, nil)
-	// test function doesn't throw an error!
-	assert.NoError(t, err)
-	assert.Equal(t, []uint16{}, result.ToSlice())
+	result, _, err = Eq("val", 99)(fi, nil)
+	assert.ErrorIs(t, ErrValueNotFound{99}, err)
+	assert.Nil(t, result)
+
 	// invalid field
-	result, _, err = Eq[uint16]("bad", 99)(fi, nil)
-	assert.Error(t, err)
+	result, _, err = Eq("bad", 1)(fi, nil)
+	assert.ErrorIs(t, ErrInvalidIndexdName{"bad"}, err)
 	assert.Nil(t, result)
 
 	// OR
 	result, canMutate, err =
-		Eq[uint16]("val", 3).
-			Or(Eq[uint16]("val", 1))(fi, nil)
+		Eq("val", 3).
+			Or(Eq("val", 1))(fi, nil)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{1, 3, 5}, result.ToSlice())
+	assert.Equal(t, []uint32{1, 3, 5}, result.ToSlice())
 
 	// And
 	result, canMutate, err =
-		Eq[uint16]("val", 3).
-			And(Eq[uint16]("val", 3))(fi, nil)
+		Eq("val", 3).
+			And(Eq("val", 3))(fi, nil)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{3, 5}, result.ToSlice())
+	assert.Equal(t, []uint32{3, 5}, result.ToSlice())
 
 	// after and | or, to check the original BitSet is not changed
-	assert.Equal(t, []uint16{1}, mi.Get(Equal, 1).ToSlice())
-	assert.Equal(t, []uint16{42}, mi.Get(Equal, 42).ToSlice())
-	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, 3).ToSlice())
+	bs, _ := mi.Get(Equal, 1)
+	assert.Equal(t, []uint32{1}, bs.ToSlice())
+	bs, _ = mi.Get(Equal, 42)
+	assert.Equal(t, []uint32{42}, bs.ToSlice())
+	bs, _ = mi.Get(Equal, 3)
+	assert.Equal(t, []uint32{3, 5}, bs.ToSlice())
 }
 
 func TestMapIndex_Query_Not(t *testing.T) {
-	mi := NewMapIndex[uint16]()
+	mi := NewMapIndex(func(t int) int { return t })
 	mi.Set(1, 1)
 	mi.Set(3, 3)
 	mi.Set(3, 5)
@@ -119,28 +126,31 @@ func TestMapIndex_Query_Not(t *testing.T) {
 
 	fi := fieldIndexMap(mi)
 
-	allIDs := NewBitSetFrom[uint16](1, 3, 5, 42)
+	allIDs := NewBitSetFrom[uint32](1, 3, 5, 42)
 
 	// Not
-	result, canMutate, err := Not(Eq[uint16]("val", 3))(fi, allIDs)
+	result, canMutate, err := Not(Eq("val", 3))(fi, allIDs)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
+	assert.Equal(t, []uint32{1, 42}, result.ToSlice())
 
 	// NotEq
-	result, canMutate, err = NotEq[uint16]("val", 3)(fi, allIDs)
+	result, canMutate, err = NotEq("val", 3)(fi, allIDs)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
+	assert.Equal(t, []uint32{1, 42}, result.ToSlice())
 
 	// after and | or, to check the original BitSet is not changed
-	assert.Equal(t, []uint16{1}, mi.Get(Equal, 1).ToSlice())
-	assert.Equal(t, []uint16{42}, mi.Get(Equal, 42).ToSlice())
-	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, 3).ToSlice())
+	bs, _ := mi.Get(Equal, 1)
+	assert.Equal(t, []uint32{1}, bs.ToSlice())
+	bs, _ = mi.Get(Equal, 42)
+	assert.Equal(t, []uint32{42}, bs.ToSlice())
+	bs, _ = mi.Get(Equal, 3)
+	assert.Equal(t, []uint32{3, 5}, bs.ToSlice())
 }
 
 func TestMapIndex_Query_In(t *testing.T) {
-	mi := NewMapIndex[uint16]()
+	mi := NewMapIndex(func(t int) int { return t })
 	mi.Set(1, 1)
 	mi.Set(3, 3)
 	mi.Set(3, 5)
@@ -149,39 +159,42 @@ func TestMapIndex_Query_In(t *testing.T) {
 	fi := fieldIndexMap(mi)
 
 	// In empty
-	result, canMutate, err := In[uint16]("val")(fi, nil)
+	result, canMutate, err := In("val")(fi, nil)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{}, result.ToSlice())
+	assert.Equal(t, []uint32{}, result.ToSlice())
 
 	// In one
-	result, canMutate, err = In[uint16]("val", 1)(fi, nil)
+	result, canMutate, err = In("val", 1)(fi, nil)
 	assert.NoError(t, err)
 	assert.False(t, canMutate)
-	assert.Equal(t, []uint16{1}, result.ToSlice())
+	assert.Equal(t, []uint32{1}, result.ToSlice())
 
 	// In many
-	result, canMutate, err = In[uint16]("val", 42, 1)(fi, nil)
+	result, canMutate, err = In("val", 42, 1)(fi, nil)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
-	assert.Equal(t, []uint16{1, 42}, result.ToSlice())
+	assert.Equal(t, []uint32{1, 42}, result.ToSlice())
 
 	// after and | or, to check the original BitSet is not changed
-	assert.Equal(t, []uint16{1}, mi.Get(Equal, 1).ToSlice())
-	assert.Equal(t, []uint16{42}, mi.Get(Equal, 42).ToSlice())
-	assert.Equal(t, []uint16{3, 5}, mi.Get(Equal, 3).ToSlice())
+	bs, _ := mi.Get(Equal, 1)
+	assert.Equal(t, []uint32{1}, bs.ToSlice())
+	bs, _ = mi.Get(Equal, 42)
+	assert.Equal(t, []uint32{42}, bs.ToSlice())
+	bs, _ = mi.Get(Equal, 3)
+	assert.Equal(t, []uint32{3, 5}, bs.ToSlice())
 }
 
 func TestMapIndex_QueryAll(t *testing.T) {
-	mi := NewMapIndex[uint16]()
+	mi := NewMapIndex(func(t int) int { return t })
 	mi.Set(1, 1)
 	mi.Set(3, 3)
 	mi.Set(3, 5)
 	mi.Set(42, 42)
 
 	fi := fieldIndexMap(mi)
-	result, canMutate, err := All[uint16]()(fi, NewBitSetFrom[uint16](1, 3, 5, 42))
+	result, canMutate, err := All()(fi, NewBitSetFrom[uint32](1, 3, 5, 42))
 	assert.NoError(t, err)
 	assert.False(t, canMutate)
-	assert.Equal(t, []uint16{1, 3, 5, 42}, result.ToSlice())
+	assert.Equal(t, []uint32{1, 3, 5, 42}, result.ToSlice())
 }

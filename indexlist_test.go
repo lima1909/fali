@@ -2,6 +2,7 @@ package main
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,15 +18,15 @@ type car struct {
 func TestIndexList_Base(t *testing.T) {
 	il := NewIndexList[car]()
 
-	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
-	il.CreateIndex("isnew", func(c *car) any { return c.isNew }, NewMapIndex[uint32]())
+	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	il.CreateIndex("isnew", NewMapIndex(func(c car) bool { return c.isNew }))
 
 	il.Add(car{name: "Dacia", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
 	il.Add(car{name: "Mercedes", age: 5, isNew: true})
 	il.Add(car{name: "Dacia", age: 22})
 
-	il.CreateIndex("age", func(c *car) any { return c.age }, NewMapIndex[uint32]())
+	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
 
 	c, found := il.list.Get(1)
 	assert.True(t, found)
@@ -34,29 +35,29 @@ func TestIndexList_Base(t *testing.T) {
 	_, found = il.list.Get(99)
 	assert.False(t, found)
 
-	qr, err := il.Query(Eq[uint32]("name", "Opel"))
+	qr, err := il.Query(Eq("name", "Opel"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
 
-	qr, err = il.Query(Eq[uint32]("age", uint8(5)))
+	qr, err = il.Query(Eq("age", uint8(5)))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
 
-	qr, err = il.Query(Eq[uint32]("isnew", false))
+	qr, err = il.Query(Eq("isnew", false))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 
-	qr, err = il.Query(Eq[uint32]("isnew", true))
+	qr, err = il.Query(Eq("isnew", true))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
 	// wrong value type, expected: uint8, got int
 
-	qr, err = il.Query(Eq[uint32]("age", 5))
+	qr, err = il.Query(Eq("age", 5))
 	assert.Error(t, err)
 	assert.Equal(t, QueryResult[car]{}, qr)
 
 	// wrong field name, expected: age, got wrong
-	qr, err = il.Query(Eq[uint32]("wrong", 5))
+	qr, err = il.Query(Eq("wrong", 5))
 	assert.Error(t, err)
 	assert.Equal(t, QueryResult[car]{}, qr)
 }
@@ -65,7 +66,7 @@ func TestIndexList_QueryResult(t *testing.T) {
 	less := func(c1, c2 *car) bool { return strings.Compare(c1.name, c2.name) < 0 }
 
 	il := NewIndexList[car]()
-	il.CreateIndex("age", func(c *car) any { return c.age }, NewMapIndex[uint32]())
+	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
@@ -73,7 +74,7 @@ func TestIndexList_QueryResult(t *testing.T) {
 	il.Add(car{name: "Dacia", age: 22})
 	il.Add(car{name: "Audi", age: 22})
 
-	qr, err := il.Query(Eq[uint32]("age", uint8(22)))
+	qr, err := il.Query(Eq("age", uint8(22)))
 	assert.NoError(t, err)
 
 	assert.False(t, qr.Empty())
@@ -100,8 +101,8 @@ func TestIndexList_QueryResult(t *testing.T) {
 
 func TestIndexList_Remove(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
-	il.CreateIndex("age", func(c *car) any { return c.age }, NewMapIndex[uint32]())
+	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
@@ -109,7 +110,7 @@ func TestIndexList_Remove(t *testing.T) {
 	il.Add(car{name: "Dacia", age: 22})
 	il.Add(car{name: "Audi", age: 22})
 
-	qr, err := il.Query(All[uint32]())
+	qr, err := il.Query(All())
 	assert.NoError(t, err)
 
 	assert.False(t, qr.Empty())
@@ -121,19 +122,19 @@ func TestIndexList_Remove(t *testing.T) {
 	assert.Equal(t, 4, il.Count())
 	assert.Equal(t, c, car{name: "Dacia", age: 22})
 	// try to find item on index 3
-	qr, err = il.Query(Eq[uint32]("name", "Dacia").And(Eq[uint32]("age", uint8(22))))
+	qr, err = il.Query(Eq("name", "Dacia").And(Eq("age", uint8(22))))
 	assert.NoError(t, err)
 	assert.Equal(t, 0, qr.Count())
 
 	_, removed = il.removeNoLock(99)
 	assert.False(t, removed)
 
-	qr, err = il.Query(Eq[uint32]("name", "Dacia"))
+	qr, err = il.Query(Eq("name", "Dacia"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
 	assert.Equal(t, []car{{name: "Dacia", age: 5, isNew: true}}, qr.Values())
 
-	qr, err = il.Query(Eq[uint32]("age", uint8(22)))
+	qr, err = il.Query(Eq("age", uint8(22)))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 
@@ -145,6 +146,71 @@ func TestIndexList_Remove(t *testing.T) {
 	assert.Equal(t, car{name: "Dacia", age: 5, isNew: true}, c)
 }
 
+func TestIndexList_RemoveLater(t *testing.T) {
+	il := NewIndexList[car]()
+	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+
+	il.Add(car{name: "Mercedes", age: 22, color: "red"})
+	il.Add(car{name: "Opel", age: 22})
+	il.Add(car{name: "Dacia", age: 5, isNew: true})
+	il.Add(car{name: "Dacia", age: 22})
+	il.Add(car{name: "Audi", age: 22})
+
+	qr1, err := il.Query(Eq("name", "Dacia"))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr1.Count())
+
+	qr2, err := il.Query(Eq("name", "Dacia"))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr2.Count())
+
+	qr1.Remove()
+	assert.Equal(t, 0, qr1.Count())
+	assert.Equal(t, 0, qr2.Count())
+
+	_, err = il.Query(Eq("name", "Dacia"))
+	// Dacia doesn't exist anymore
+	assert.ErrorIs(t, ErrValueNotFound{"Dacia"}, err)
+
+	// qr1 has allready remove all Dacia
+	qr2.Remove()
+}
+
+func TestIndexList_RemoveLaterAsync(t *testing.T) {
+	il := NewIndexList[car]()
+	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+
+	il.Add(car{name: "Mercedes", age: 22, color: "red"})
+	il.Add(car{name: "Opel", age: 22})
+	il.Add(car{name: "Dacia", age: 5, isNew: true})
+	il.Add(car{name: "Dacia", age: 22})
+	il.Add(car{name: "Audi", age: 22})
+
+	qr1, err := il.Query(Eq("name", "Dacia"))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr1.Count())
+
+	qr2, err := il.Query(Eq("name", "Dacia"))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr2.Count())
+
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		qr1.Remove()
+		assert.Equal(t, 0, qr1.Count())
+	})
+
+	wg.Go(func() {
+		qr2.Remove()
+		assert.Equal(t, 0, qr2.Count())
+	})
+
+	wg.Wait()
+}
+
 func TestIndexList_CreateIndex(t *testing.T) {
 	il := NewIndexList[car]()
 	il.Add(car{name: "Dacia", age: 22, color: "red"})
@@ -152,13 +218,13 @@ func TestIndexList_CreateIndex(t *testing.T) {
 	il.Add(car{name: "Mercedes", age: 5, isNew: true})
 	il.Add(car{name: "Dacia", age: 22})
 
-	_, err := il.Query(Eq[uint32]("name", "Opel"))
+	_, err := il.Query(Eq("name", "Opel"))
 	assert.Error(t, err)
 	assert.Equal(t, "could not found index for field name: name", err.Error())
 
 	// create Index for name
-	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
-	qr, err := il.Query(Eq[uint32]("name", "Opel"))
+	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	qr, err := il.Query(Eq("name", "Opel"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
 	assert.Equal(t, []car{{name: "Opel", age: 22}}, qr.Values())
@@ -166,20 +232,20 @@ func TestIndexList_CreateIndex(t *testing.T) {
 
 func TestIndexList_CreateIndexVarious(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", func(c *car) any { return c.name }, NewMapIndex[uint32]())
-	il.CreateIndex("age", func(c *car) any { return c.age }, NewSortedIndex[uint8, uint32]())
+	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	il.CreateIndex("age", NewSortedIndex(func(c car) uint8 { return c.age }))
 
 	il.Add(car{name: "Dacia", age: 2, color: "red"})
 	il.Add(car{name: "Opel", age: 12})
 	il.Add(car{name: "Mercedes", age: 5, isNew: true})
 	il.Add(car{name: "Dacia", age: 22})
 
-	qr, err := il.Query(Eq[uint32]("name", "Opel"))
+	qr, err := il.Query(Eq("name", "Opel"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
 	assert.Equal(t, []car{{name: "Opel", age: 12}}, qr.Values())
 
-	qr, err = il.Query(Rel[uint32]("age", Less, uint8(13)))
+	qr, err = il.Query(Rel("age", Less, uint8(13)))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 	assert.Equal(t, []car{

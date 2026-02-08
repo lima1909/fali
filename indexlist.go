@@ -1,10 +1,12 @@
 package main
 
 import (
-	"reflect"
 	"sort"
 	"sync"
 )
+
+// Index32 the IndexList only supported uint32 List-Indices
+type Index32[T any] = Index[T, uint32]
 
 // GetFieldValue helper function to get the value for a given type: T (mostly a struct)
 type FieldValueFn[T any] = func(*T) any
@@ -31,25 +33,15 @@ func NewIndexList[T any]() *IndexList[T] {
 //   - fieldName: a name for a field of the saved Item
 //   - fieldGetFn: a function, which returns the value of an field
 //   - Index: a impl of the Index interface
-func (l *IndexList[T]) CreateIndex(fieldName string, fieldGetFn FieldGetFn[T], index Index[uint32]) {
-
-	var t T
-
-	fieldIndex := FieldIndex[T, uint32]{
-		index:             index,
-		fieldFn:           fieldGetFn,
-		fieldFnResultType: reflect.TypeOf(fieldGetFn(&t)),
-	}
-
+func (l *IndexList[T]) CreateIndex(fieldName string, index Index32[T]) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
 	for idx, item := range l.list.Iter() {
-		val := fieldIndex.fieldFn(&item)
-		fieldIndex.index.Set(val, uint32(idx))
+		index.Set(item, uint32(idx))
 	}
 
-	l.fieldIndexMap[fieldName] = fieldIndex
+	l.fieldIndexMap[fieldName] = index
 }
 
 // Add add the given Item to the list,
@@ -62,15 +54,14 @@ func (l *IndexList[T]) Add(item T) int {
 	l.allIDs.Set(uint32(idx))
 
 	for _, fieldIndex := range l.fieldIndexMap {
-		val := fieldIndex.fieldFn(&item)
-		fieldIndex.index.Set(val, uint32(idx))
+		fieldIndex.Set(item, uint32(idx))
 	}
 
 	return idx
 }
 
 // Query execute the given Query.
-func (l *IndexList[T]) Query(query Query[uint32]) (QueryResult[T], error) {
+func (l *IndexList[T]) Query(query Query32) (QueryResult[T], error) {
 	l.lock.RLock()
 	bs, _, err := query(l.fieldIndexMap.IndexByName, &l.allIDs)
 	l.lock.RUnlock()
@@ -79,7 +70,7 @@ func (l *IndexList[T]) Query(query Query[uint32]) (QueryResult[T], error) {
 		return QueryResult[T]{}, err
 	}
 
-	return QueryResult[T]{bitSet: *bs, list: l}, nil
+	return QueryResult[T]{bitSet: bs, list: l}, nil
 }
 
 // Count the Items, which in this list exist
@@ -91,7 +82,7 @@ func (l *IndexList[T]) Count() int {
 }
 
 type QueryResult[T any] struct {
-	bitSet BitSet[uint32]
+	bitSet *BitSet[uint32]
 	list   *IndexList[T]
 }
 
@@ -141,8 +132,7 @@ func (l *IndexList[T]) removeNoLock(index int) (t T, removed bool) {
 	l.allIDs.UnSet(uint32(index))
 
 	for _, fieldIndex := range l.fieldIndexMap {
-		val := fieldIndex.fieldFn(&item)
-		fieldIndex.index.UnSet(val, uint32(index))
+		fieldIndex.UnSet(item, uint32(index))
 	}
 
 	return item, removed

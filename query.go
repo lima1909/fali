@@ -1,64 +1,101 @@
 package main
 
+type Relation int8
+
+const (
+	Equal Relation = 1 << iota
+	Less
+	Greater
+	LessEqual
+	GreaterEqual
+)
+
+type QueryFieldGetFn[R Row] = func(Relation, any) (*BitSet[R], error)
+
 // FieldIndexFn is the interfact to the FieldIndexMap
-type FieldIndexFn[R Row] = func(string, any) (Index[R], error)
+type FieldIndexFn[R Row] = func(string, any) (QueryFieldGetFn[R], error)
 
 // Query is a filter function, find the correct Index an execute the Index.Get method
 // and returns a BitSet pointer
-type Query[R Row] func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error)
+type Query[R Row] func(fi FieldIndexFn[R], allIDs *BitSet[R]) (bs *BitSet[R], canMutate bool, err error)
+
+// Query32 supported only  uint32 List-Indices
+type Query32 = Query[uint32]
 
 // All means returns all Items, no filtering
-func All[R Row]() Query[R] {
+func All() Query32 { return all[uint32]() }
+
+//go:inline
+func all[R Row]() Query[R] {
 	return func(_ FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
 		return allIDs, false, nil
 	}
 }
 
 // Rel fieldName rel (Equal, Less, ...) val
-func Rel[R Row](fieldName string, relation Relation, val any) Query[R] {
+func Rel(fieldName string, r Relation, val any) Query32 { return rel[uint32](fieldName, r, val) }
+
+//go:inline
+func rel[R Row](fieldName string, relation Relation, val any) Query[R] {
 	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
-		idx, err := fi(fieldName, val)
+		get, err := fi(fieldName, val)
 		if err != nil {
 			return nil, false, err
 		}
 
-		return idx.Get(relation, val), false, nil
+		bs, err := get(relation, val)
+		return bs, false, err
 	}
 }
 
 // Eq fieldName = val
-func Eq[R Row](fieldName string, val any) Query[R] {
+func Eq(fieldName string, val any) Query32 { return eq[uint32](fieldName, val) }
+
+//go:inline
+func eq[R Row](fieldName string, val any) Query[R] {
 	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
-		idx, err := fi(fieldName, val)
+		get, err := fi(fieldName, val)
 		if err != nil {
 			return nil, false, err
 		}
 
-		return idx.Get(Equal, val), false, nil
+		bs, err := get(Equal, val)
+		return bs, false, err
 	}
 }
 
 // In combines Eq with an Or
 // In("name", "Paul", "Egon") => name == "Paul" Or name == "Egon"
-func In[R Row](fieldName string, vals ...any) Query[R] {
+func In(fieldName string, vals ...any) Query32 { return in[uint32](fieldName, vals...) }
+
+//go:inline
+func in[R Row](fieldName string, vals ...any) Query[R] {
 	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
 		if len(vals) == 0 {
 			return NewBitSet[R](), true, nil
 		}
 
-		idx, err := fi(fieldName, vals[0])
+		get, err := fi(fieldName, vals[0])
 		if err != nil {
 			return nil, false, err
 		}
 
-		bs := idx.Get(Equal, vals[0])
+		bs, err := get(Equal, vals[0])
+		if err != nil {
+			return nil, false, err
+		}
+
 		if len(vals) == 1 {
 			return bs, false, nil
 		}
 
 		bs = bs.Copy()
 		for _, val := range vals[1:] {
-			bs.Or(idx.Get(Equal, val))
+			bsGet, err := get(Equal, val)
+			if err != nil {
+				return nil, false, err
+			}
+			bs.Or(bsGet)
 		}
 
 		return bs, true, nil
@@ -66,9 +103,12 @@ func In[R Row](fieldName string, vals ...any) Query[R] {
 }
 
 // NotEq is a shorcut for Not(Eq(...))
-func NotEq[R Row](fieldName string, val any) Query[R] {
+func NotEq(fieldName string, val any) Query32 { return notEq[uint32](fieldName, val) }
+
+//go:inline
+func notEq[R Row](fieldName string, val any) Query[R] {
 	return func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
-		eq := Eq[R](fieldName, val)
+		eq := eq[R](fieldName, val)
 		return Not(eq)(fi, allIDs)
 	}
 }
