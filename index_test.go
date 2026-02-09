@@ -7,28 +7,28 @@ import (
 )
 
 func TestSortedIndex_Equal(t *testing.T) {
-	si := NewSortedIndex(func(t string) string { return t })
-	si.Set("a", 1)
-	si.Set("a", 2)
-	si.Set("b", 3)
+	si := NewSortedIndex(stringGetFn)
+	set(si, "a", 1)
+	set(si, "a", 2)
+	set(si, "b", 3)
 
 	bs, _ := si.Get(Equal, "a")
 	assert.Equal(t, []uint32{1, 2}, bs.ToSlice())
 
-	si.UnSet("a", 2)
+	unSet(si, "a", 2)
 	bs, _ = si.Get(Equal, "a")
 	assert.Equal(t, []uint32{1}, bs.ToSlice())
 
-	si.UnSet("a", 1)
+	unSet(si, "a", 1)
 	_, err := si.Get(Equal, "a")
 	assert.ErrorIs(t, ErrValueNotFound{"a"}, err)
 }
 
 func TestSortedIndex_Less(t *testing.T) {
-	si := NewSortedIndex(func(t int) int { return t })
-	si.Set(1, 1)
-	si.Set(1, 2)
-	si.Set(3, 3)
+	si := NewSortedIndex(intGetFn)
+	set(si, 1, 1)
+	set(si, 1, 2)
+	set(si, 3, 3)
 
 	bs, _ := si.Get(Less, 0)
 	assert.Equal(t, []uint32{}, bs.ToSlice())
@@ -43,10 +43,10 @@ func TestSortedIndex_Less(t *testing.T) {
 }
 
 func TestSortedIndex_LessEqual(t *testing.T) {
-	si := NewSortedIndex(func(t int) int { return t })
-	si.Set(1, 1)
-	si.Set(1, 2)
-	si.Set(3, 3)
+	si := NewSortedIndex(intGetFn)
+	set(si, 1, 1)
+	set(si, 1, 2)
+	set(si, 3, 3)
 
 	bs, _ := si.Get(LessEqual, 0)
 	assert.Equal(t, []uint32{}, bs.ToSlice())

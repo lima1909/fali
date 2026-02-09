@@ -5,17 +5,11 @@ import (
 	"sync"
 )
 
-// Index32 the IndexList only supported uint32 List-Indices
-type Index32[T any] = Index[T, uint32]
-
-// GetFieldValue helper function to get the value for a given type: T (mostly a struct)
-type FieldValueFn[T any] = func(*T) any
-
 // IndexList is a list (slice), which is extended by Indices for fast finding Items in the list.
 type IndexList[T any] struct {
 	list          FreeList[T]
 	allIDs        BitSet[uint32]
-	fieldIndexMap FieldIndexMap[T, uint32]
+	fieldIndexMap fieldIndexMap[T]
 
 	lock sync.RWMutex
 }
@@ -25,7 +19,7 @@ func NewIndexList[T any]() *IndexList[T] {
 	return &IndexList[T]{
 		list:          NewFreeList[T](),
 		allIDs:        BitSet[uint32]{data: make([]uint64, 0)},
-		fieldIndexMap: NewFieldIndexMap[T, uint32](),
+		fieldIndexMap: make(fieldIndexMap[T], 0),
 	}
 }
 
@@ -38,7 +32,7 @@ func (l *IndexList[T]) CreateIndex(fieldName string, index Index32[T]) {
 	defer l.lock.Unlock()
 
 	for idx, item := range l.list.Iter() {
-		index.Set(item, uint32(idx))
+		index.Set(&item, uint32(idx))
 	}
 
 	l.fieldIndexMap[fieldName] = index
@@ -54,7 +48,7 @@ func (l *IndexList[T]) Add(item T) int {
 	l.allIDs.Set(uint32(idx))
 
 	for _, fieldIndex := range l.fieldIndexMap {
-		fieldIndex.Set(item, uint32(idx))
+		fieldIndex.Set(&item, uint32(idx))
 	}
 
 	return idx
@@ -132,8 +126,21 @@ func (l *IndexList[T]) removeNoLock(index int) (t T, removed bool) {
 	l.allIDs.UnSet(uint32(index))
 
 	for _, fieldIndex := range l.fieldIndexMap {
-		fieldIndex.UnSet(item, uint32(index))
+		fieldIndex.UnSet(&item, uint32(index))
 	}
 
 	return item, removed
+}
+
+// ------------------------
+
+// fieldIndexMap maps a given field name to an Index
+type fieldIndexMap[T any] map[string]Index32[T]
+
+// IndexByName is the default impl for the FieldIndexFn
+func (f fieldIndexMap[T]) IndexByName(fieldName string, val any) (QueryFieldGetFn[uint32], error) {
+	if idx, found := f[fieldName]; found {
+		return idx.Get, nil
+	}
+	return nil, ErrInvalidIndexdName{fieldName}
 }

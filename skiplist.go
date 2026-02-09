@@ -22,7 +22,7 @@ const (
 	population = 0.25
 )
 
-type VisitFn[K comparable, V any] func(key K, val V) bool
+type VisitFn[K any, V any] func(key K, val V) bool
 
 type node[K cmp.Ordered, V any] struct {
 	key   K

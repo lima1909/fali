@@ -6,7 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func fieldIndexMap(mi Index32[int]) FieldIndexFn[uint32] {
+func set[T any](idx Index32[T], t T, r uint32)   { idx.Set(&t, r) }
+func unSet[T any](idx Index32[T], t T, r uint32) { idx.UnSet(&t, r) }
+
+func stringGetFn(t *string) string { return *t }
+func intGetFn(t *int) int          { return *t }
+
+func fieldIndexMapFn[T any](mi Index32[T]) FieldIndexFn[uint32] {
 	return func(fieldName string, _ any) (QueryFieldGetFn[uint32], error) {
 		if fieldName == "val" {
 			return mi.Get, nil
@@ -16,39 +22,56 @@ func fieldIndexMap(mi Index32[int]) FieldIndexFn[uint32] {
 	}
 }
 
-func TestMapIndex_Set_UnSet(t *testing.T) {
-	mi := NewMapIndex(func(t int) int { return t })
-	mi.Set(1, 1)
-	mi.Set(3, 3)
-	mi.Set(3, 5)
-	mi.Set(42, 42)
-	assert.Equal(t, 3, len(mi.data))
+func TestMapIndex_UnSet(t *testing.T) {
+	mi := NewMapIndex(intGetFn)
+	set(mi, 1, 1)
+	set(mi, 3, 3)
+	set(mi, 3, 5)
+	set(mi, 42, 42)
 
-	mi.UnSet(42, 42)
-	assert.Equal(t, 2, len(mi.data))
+	// check all values are correct
+	bs, err := mi.Get(Equal, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, bs.Count())
+	bs, err = mi.Get(Equal, 3)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, bs.Count())
+	bs, err = mi.Get(Equal, 42)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, bs.Count())
 
-	// the same len, because for key 3 still exist the row 5
-	mi.UnSet(3, 3)
-	assert.Equal(t, 2, len(mi.data))
+	// remove the last one: 42
+	unSet(mi, 42, 42)
+	_, err = mi.Get(Equal, 42)
+	assert.ErrorIs(t, ErrValueNotFound{42}, err)
 
-	// for key 1 is no row 99, no deletion
-	mi.UnSet(1, 99)
-	assert.Equal(t, 2, len(mi.data))
+	// remove value 3
+	unSet(mi, 3, 3)
+	bs, err = mi.Get(Equal, 3)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, bs.Count())
+	unSet(mi, 3, 5)
+	_, err = mi.Get(Equal, 3)
+	assert.ErrorIs(t, ErrValueNotFound{3}, err)
 
-	mi.UnSet(1, 1)
-	assert.Equal(t, 1, len(mi.data))
+	// for value 1 is no row 99, no deletion (ignored)
+	unSet(mi, 1, 99)
+	bs, err = mi.Get(Equal, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, bs.Count())
 
-	// map is empty
-	mi.UnSet(3, 5)
-	assert.Equal(t, 0, len(mi.data))
+	// remove value 1
+	unSet(mi, 1, 1)
+	_, err = mi.Get(Equal, 1)
+	assert.ErrorIs(t, ErrValueNotFound{1}, err)
 }
 
 func TestMapIndex_Get(t *testing.T) {
-	mi := NewMapIndex(func(t int) int { return t })
-	mi.Set(1, 1)
-	mi.Set(3, 3)
-	mi.Set(3, 5)
-	mi.Set(42, 42)
+	mi := NewMapIndex(intGetFn)
+	set(mi, 1, 1)
+	set(mi, 3, 3)
+	set(mi, 3, 5)
+	set(mi, 42, 42)
 
 	bs, _ := mi.Get(Equal, 1)
 	assert.Equal(t, NewBitSetFrom[uint32](1), bs)
@@ -64,13 +87,13 @@ func TestMapIndex_Get(t *testing.T) {
 }
 
 func TestMapIndex_Query(t *testing.T) {
-	mi := NewMapIndex(func(t int) int { return t })
-	mi.Set(1, 1)
-	mi.Set(3, 3)
-	mi.Set(3, 5)
-	mi.Set(42, 42)
+	mi := NewMapIndex(intGetFn)
+	set(mi, 1, 1)
+	set(mi, 3, 3)
+	set(mi, 3, 5)
+	set(mi, 42, 42)
 
-	fi := fieldIndexMap(mi)
+	fi := fieldIndexMapFn(mi)
 
 	result, canMutate, err := Eq("val", 3)(fi, nil)
 	assert.NoError(t, err)
@@ -118,13 +141,13 @@ func TestMapIndex_Query(t *testing.T) {
 }
 
 func TestMapIndex_Query_Not(t *testing.T) {
-	mi := NewMapIndex(func(t int) int { return t })
-	mi.Set(1, 1)
-	mi.Set(3, 3)
-	mi.Set(3, 5)
-	mi.Set(42, 42)
+	mi := NewMapIndex(intGetFn)
+	set(mi, 1, 1)
+	set(mi, 3, 3)
+	set(mi, 3, 5)
+	set(mi, 42, 42)
 
-	fi := fieldIndexMap(mi)
+	fi := fieldIndexMapFn(mi)
 
 	allIDs := NewBitSetFrom[uint32](1, 3, 5, 42)
 
@@ -150,13 +173,13 @@ func TestMapIndex_Query_Not(t *testing.T) {
 }
 
 func TestMapIndex_Query_In(t *testing.T) {
-	mi := NewMapIndex(func(t int) int { return t })
-	mi.Set(1, 1)
-	mi.Set(3, 3)
-	mi.Set(3, 5)
-	mi.Set(42, 42)
+	mi := NewMapIndex(intGetFn)
+	set(mi, 1, 1)
+	set(mi, 3, 3)
+	set(mi, 3, 5)
+	set(mi, 42, 42)
 
-	fi := fieldIndexMap(mi)
+	fi := fieldIndexMapFn(mi)
 
 	// In empty
 	result, canMutate, err := In("val")(fi, nil)
@@ -186,13 +209,13 @@ func TestMapIndex_Query_In(t *testing.T) {
 }
 
 func TestMapIndex_QueryAll(t *testing.T) {
-	mi := NewMapIndex(func(t int) int { return t })
-	mi.Set(1, 1)
-	mi.Set(3, 3)
-	mi.Set(3, 5)
-	mi.Set(42, 42)
+	mi := NewMapIndex(intGetFn)
+	set(mi, 1, 1)
+	set(mi, 3, 3)
+	set(mi, 3, 5)
+	set(mi, 42, 42)
 
-	fi := fieldIndexMap(mi)
+	fi := fieldIndexMapFn(mi)
 	result, canMutate, err := All()(fi, NewBitSetFrom[uint32](1, 3, 5, 42))
 	assert.NoError(t, err)
 	assert.False(t, canMutate)

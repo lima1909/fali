@@ -4,66 +4,52 @@ import (
 	"cmp"
 )
 
-func NewFieldIndexMap[T any, R Row]() FieldIndexMap[T, R] {
-	return make(FieldIndexMap[T, R], 0)
+// Index32 the IndexList only supported uint32 List-Indices
+type Index32[T any] = Index[T, uint32]
+
+// Index is interface for handling the mapping of an Value: V to an List-Index: LI
+// The Value V comes from a func(*OBJ) V
+type Index[OBJ any, LI Value] interface {
+	Set(*OBJ, LI)
+	UnSet(*OBJ, LI)
+	Get(Relation, any) (*BitSet[LI], error)
 }
-
-// FieldIndexMap maps a given field name to an Index
-type FieldIndexMap[T any, R Row] map[string]Index[T, R]
-
-// IndexByName is the default impl for the FieldIndexFn
-func (f FieldIndexMap[T, R]) IndexByName(fieldName string, val any) (QueryFieldGetFn[R], error) {
-	if idx, found := f[fieldName]; found {
-		return idx.Get, nil
-	}
-	return nil, ErrInvalidIndexdName{fieldName}
-}
-
-type Row = Value
-
-type Index[T any, R Row] interface {
-	Set(T, R)
-	UnSet(T, R)
-	Get(Relation, any) (*BitSet[R], error)
-}
-
-type FieldGetFn[T any, V any] func(T) V
 
 // MapIndex is a mapping of any value to the Index in the List.
 // This index only supported Queries with the Equal Ralation!
-type MapIndex[T any, V any, R Row] struct {
-	data       map[any]*BitSet[R]
-	fieldGetFn FieldGetFn[T, V]
+type MapIndex[OBJ any, V any, LI Value] struct {
+	data       map[any]*BitSet[LI]
+	fieldGetFn func(*OBJ) V
 }
 
-func NewMapIndex[T any, V any](fieldGetFn FieldGetFn[T, V]) *MapIndex[T, V, uint32] {
-	return &MapIndex[T, V, uint32]{
+func NewMapIndex[OBJ any, V any](fieldGetFn func(*OBJ) V) Index32[OBJ] {
+	return &MapIndex[OBJ, V, uint32]{
 		data:       make(map[any]*BitSet[uint32]),
 		fieldGetFn: fieldGetFn,
 	}
 }
 
-func (mi *MapIndex[T, V, R]) Set(obj T, row R) {
+func (mi *MapIndex[OBJ, V, LI]) Set(obj *OBJ, lidx LI) {
 	value := mi.fieldGetFn(obj)
 	bs, found := mi.data[value]
 	if !found {
-		bs = NewBitSet[R]()
+		bs = NewBitSet[LI]()
 	}
-	bs.Set(row)
+	bs.Set(lidx)
 	mi.data[value] = bs
 }
 
-func (mi *MapIndex[T, V, R]) UnSet(obj T, row R) {
+func (mi *MapIndex[OBJ, V, LI]) UnSet(obj *OBJ, lidx LI) {
 	value := mi.fieldGetFn(obj)
 	if bs, found := mi.data[value]; found {
-		bs.UnSet(row)
+		bs.UnSet(lidx)
 		if bs.Count() == 0 {
 			delete(mi.data, value)
 		}
 	}
 }
 
-func (mi *MapIndex[T, V, R]) Get(relation Relation, value any) (*BitSet[R], error) {
+func (mi *MapIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI], error) {
 	if _, ok := value.(V); !ok {
 		return nil, ErrInvalidIndexValue[V]{value}
 	}
@@ -81,39 +67,39 @@ func (mi *MapIndex[T, V, R]) Get(relation Relation, value any) (*BitSet[R], erro
 }
 
 // SortedIndex is well suited for Queries with: Range, Min, Max, Greater and Less
-type SortedIndex[T any, V cmp.Ordered, R Row] struct {
-	skipList   SkipList[V, *BitSet[R]]
-	fieldGetFn FieldGetFn[T, V]
+type SortedIndex[OBJ any, V cmp.Ordered, LI Value] struct {
+	skipList   SkipList[V, *BitSet[LI]]
+	fieldGetFn func(*OBJ) V
 }
 
-func NewSortedIndex[T any, V cmp.Ordered](fieldGetFn FieldGetFn[T, V]) Index[T, uint32] {
-	return &SortedIndex[T, V, uint32]{
+func NewSortedIndex[OBJ any, V cmp.Ordered](fieldGetFn func(*OBJ) V) Index32[OBJ] {
+	return &SortedIndex[OBJ, V, uint32]{
 		skipList:   NewSkipList[V, *BitSet[uint32]](),
 		fieldGetFn: fieldGetFn,
 	}
 }
 
-func (si *SortedIndex[T, V, R]) Set(obj T, row R) {
+func (si *SortedIndex[OBJ, V, LI]) Set(obj *OBJ, lidx LI) {
 	value := si.fieldGetFn(obj)
 	bs, found := si.skipList.Get(value)
 	if !found {
-		bs = NewBitSet[R]()
+		bs = NewBitSet[LI]()
 	}
-	bs.Set(row)
+	bs.Set(lidx)
 	si.skipList.Put(value, bs)
 }
 
-func (si *SortedIndex[T, V, R]) UnSet(obj T, row R) {
+func (si *SortedIndex[OBJ, V, LI]) UnSet(obj *OBJ, lidx LI) {
 	value := si.fieldGetFn(obj)
 	if bs, found := si.skipList.Get(value); found {
-		bs.UnSet(row)
+		bs.UnSet(lidx)
 		if bs.Count() == 0 {
 			si.skipList.Delete(value)
 		}
 	}
 }
 
-func (si *SortedIndex[T, V, R]) Get(relation Relation, value any) (*BitSet[R], error) {
+func (si *SortedIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI], error) {
 	if _, ok := value.(V); !ok {
 		return nil, ErrInvalidIndexValue[V]{value}
 	}
@@ -128,11 +114,11 @@ func (si *SortedIndex[T, V, R]) Get(relation Relation, value any) (*BitSet[R], e
 	case Less:
 		minValue, found := si.skipList.MinKey()
 		if !found {
-			return NewBitSet[R](), nil
+			return NewBitSet[LI](), nil
 		}
 
-		result := NewBitSet[R]()
-		si.skipList.Range(minValue, value.(V), func(v V, bs *BitSet[R]) bool {
+		result := NewBitSet[LI]()
+		si.skipList.Range(minValue, value.(V), func(v V, bs *BitSet[LI]) bool {
 			if v == value {
 				return false
 			}
@@ -145,11 +131,11 @@ func (si *SortedIndex[T, V, R]) Get(relation Relation, value any) (*BitSet[R], e
 	case LessEqual:
 		minValue, found := si.skipList.MinKey()
 		if !found {
-			return NewBitSet[R](), nil
+			return NewBitSet[LI](), nil
 		}
 
-		result := NewBitSet[R]()
-		si.skipList.Range(minValue, value.(V), func(_ V, bs *BitSet[R]) bool {
+		result := NewBitSet[LI]()
+		si.skipList.Range(minValue, value.(V), func(_ V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})

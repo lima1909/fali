@@ -18,15 +18,15 @@ type car struct {
 func TestIndexList_Base(t *testing.T) {
 	il := NewIndexList[car]()
 
-	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
-	il.CreateIndex("isnew", NewMapIndex(func(c car) bool { return c.isNew }))
+	il.CreateIndex("name", NewMapIndex(func(c *car) string { return c.name }))
+	il.CreateIndex("isnew", NewMapIndex(func(c *car) bool { return c.isNew }))
 
 	il.Add(car{name: "Dacia", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
 	il.Add(car{name: "Mercedes", age: 5, isNew: true})
 	il.Add(car{name: "Dacia", age: 22})
 
-	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+	il.CreateIndex("age", NewMapIndex(func(c *car) uint8 { return c.age }))
 
 	c, found := il.list.Get(1)
 	assert.True(t, found)
@@ -66,7 +66,7 @@ func TestIndexList_QueryResult(t *testing.T) {
 	less := func(c1, c2 *car) bool { return strings.Compare(c1.name, c2.name) < 0 }
 
 	il := NewIndexList[car]()
-	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+	il.CreateIndex("age", NewMapIndex(func(c *car) uint8 { return c.age }))
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
@@ -101,8 +101,8 @@ func TestIndexList_QueryResult(t *testing.T) {
 
 func TestIndexList_Remove(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
-	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+	il.CreateIndex("name", NewMapIndex(func(c *car) string { return c.name }))
+	il.CreateIndex("age", NewMapIndex(func(c *car) uint8 { return c.age }))
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
@@ -148,8 +148,8 @@ func TestIndexList_Remove(t *testing.T) {
 
 func TestIndexList_RemoveLater(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
-	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+	il.CreateIndex("name", NewMapIndex(func(c *car) string { return c.name }))
+	il.CreateIndex("age", NewMapIndex(func(c *car) uint8 { return c.age }))
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
@@ -179,8 +179,8 @@ func TestIndexList_RemoveLater(t *testing.T) {
 
 func TestIndexList_RemoveLaterAsync(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
-	il.CreateIndex("age", NewMapIndex(func(c car) uint8 { return c.age }))
+	il.CreateIndex("name", NewMapIndex(func(c *car) string { return c.name }))
+	il.CreateIndex("age", NewMapIndex(func(c *car) uint8 { return c.age }))
 
 	il.Add(car{name: "Mercedes", age: 22, color: "red"})
 	il.Add(car{name: "Opel", age: 22})
@@ -223,7 +223,7 @@ func TestIndexList_CreateIndex(t *testing.T) {
 	assert.Equal(t, "could not found index for field name: name", err.Error())
 
 	// create Index for name
-	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
+	il.CreateIndex("name", NewMapIndex(func(c *car) string { return c.name }))
 	qr, err := il.Query(Eq("name", "Opel"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
@@ -232,8 +232,8 @@ func TestIndexList_CreateIndex(t *testing.T) {
 
 func TestIndexList_CreateIndexVarious(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex(func(c car) string { return c.name }))
-	il.CreateIndex("age", NewSortedIndex(func(c car) uint8 { return c.age }))
+	il.CreateIndex("name", NewMapIndex(func(c *car) string { return c.name }))
+	il.CreateIndex("age", NewSortedIndex(func(c *car) uint8 { return c.age }))
 
 	il.Add(car{name: "Dacia", age: 2, color: "red"})
 	il.Add(car{name: "Opel", age: 12})
@@ -253,4 +253,59 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 		{name: "Opel", age: 12},
 		{name: "Mercedes", age: 5, isNew: true},
 	}, qr.Values())
+}
+
+func TestIndexList_StringItem(t *testing.T) {
+	il := NewIndexList[string]()
+	il.CreateIndex("val", NewMapIndex(func(s *string) string { return *s }))
+
+	il.Add("Dacia")
+	il.Add("Opel")
+	il.Add("Mercedes")
+	il.Add("Dacia")
+
+	qr, err := il.Query(Eq("val", "Dacia"))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr.Count())
+	assert.Equal(t, []string{"Dacia", "Dacia"}, qr.Values())
+}
+
+func TestIndexList_StringPtrItemWithNil(t *testing.T) {
+	il := NewIndexList[*string]()
+	il.CreateIndex("val", NewMapIndex(func(s **string) *string { return *s }))
+
+	dacia := "Dacia"
+	il.Add(&dacia)
+	il.Add(nil)
+	il.Add(&dacia)
+
+	qr, err := il.Query(Eq("val", &dacia))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr.Count())
+	assert.Equal(t, []*string{&dacia, &dacia}, qr.Values())
+
+	// Eq = nil
+	qr, err = il.Query(Eq("val", (*string)(nil)))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, qr.Count())
+	assert.Equal(t, []*string{nil}, qr.Values())
+
+	// IsNil
+	qr, err = il.Query(IsNil[string]("val"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, qr.Count())
+	assert.Equal(t, []*string{nil}, qr.Values())
+
+	// Or(IsNil, Eq(dacia)
+	qr, err = il.Query(IsNil[string]("val").Or(Eq("val", &dacia)))
+	assert.NoError(t, err)
+	assert.Equal(t, 3, qr.Count())
+	assert.Equal(t, []*string{&dacia, nil, &dacia}, qr.Values())
+
+	// wrong IsNil Query
+	_, err = il.Query(IsNil[*string]("val"))
+	assert.ErrorIs(t, err, ErrInvalidIndexValue[*string]{(**string)(nil)})
+
+	_, err = il.Query(IsNil[int]("val"))
+	assert.ErrorIs(t, err, ErrInvalidIndexValue[*string]{(*int)(nil)})
 }

@@ -10,24 +10,24 @@ const (
 	GreaterEqual
 )
 
-type QueryFieldGetFn[R Row] = func(Relation, any) (*BitSet[R], error)
+// Query32 supported only  uint32 List-Indices
+type Query32 = Query[uint32]
+
+type QueryFieldGetFn[LI Value] = func(Relation, any) (*BitSet[LI], error)
 
 // FieldIndexFn is the interfact to the FieldIndexMap
-type FieldIndexFn[R Row] = func(string, any) (QueryFieldGetFn[R], error)
+type FieldIndexFn[LI Value] = func(string, any) (QueryFieldGetFn[LI], error)
 
 // Query is a filter function, find the correct Index an execute the Index.Get method
 // and returns a BitSet pointer
-type Query[R Row] func(fi FieldIndexFn[R], allIDs *BitSet[R]) (bs *BitSet[R], canMutate bool, err error)
-
-// Query32 supported only  uint32 List-Indices
-type Query32 = Query[uint32]
+type Query[LI Value] func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (bs *BitSet[LI], canMutate bool, err error)
 
 // All means returns all Items, no filtering
 func All() Query32 { return all[uint32]() }
 
 //go:inline
-func all[R Row]() Query[R] {
-	return func(_ FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func all[LI Value]() Query[LI] {
+	return func(_ FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		return allIDs, false, nil
 	}
 }
@@ -36,8 +36,8 @@ func all[R Row]() Query[R] {
 func Rel(fieldName string, r Relation, val any) Query32 { return rel[uint32](fieldName, r, val) }
 
 //go:inline
-func rel[R Row](fieldName string, relation Relation, val any) Query[R] {
-	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func rel[LI Value](fieldName string, relation Relation, val any) Query[LI] {
+	return func(fi FieldIndexFn[LI], _ *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		get, err := fi(fieldName, val)
 		if err != nil {
 			return nil, false, err
@@ -48,12 +48,28 @@ func rel[R Row](fieldName string, relation Relation, val any) Query[R] {
 	}
 }
 
+// IsNil is a Query which checks for a given type the nil value
+func IsNil[V any](fieldName string) Query32 { return isNil[V, uint32](fieldName) }
+
+//go:inline
+func isNil[V any, LI Value](fieldName string) Query[LI] {
+	return func(fi FieldIndexFn[LI], _ *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
+		get, err := fi(fieldName, (*V)(nil))
+		if err != nil {
+			return nil, false, err
+		}
+
+		bs, err := get(Equal, (*V)(nil))
+		return bs, false, err
+	}
+}
+
 // Eq fieldName = val
 func Eq(fieldName string, val any) Query32 { return eq[uint32](fieldName, val) }
 
 //go:inline
-func eq[R Row](fieldName string, val any) Query[R] {
-	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func eq[LI Value](fieldName string, val any) Query[LI] {
+	return func(fi FieldIndexFn[LI], _ *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		get, err := fi(fieldName, val)
 		if err != nil {
 			return nil, false, err
@@ -69,10 +85,10 @@ func eq[R Row](fieldName string, val any) Query[R] {
 func In(fieldName string, vals ...any) Query32 { return in[uint32](fieldName, vals...) }
 
 //go:inline
-func in[R Row](fieldName string, vals ...any) Query[R] {
-	return func(fi FieldIndexFn[R], _ *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func in[LI Value](fieldName string, vals ...any) Query[LI] {
+	return func(fi FieldIndexFn[LI], _ *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		if len(vals) == 0 {
-			return NewBitSet[R](), true, nil
+			return NewBitSet[LI](), true, nil
 		}
 
 		get, err := fi(fieldName, vals[0])
@@ -106,16 +122,16 @@ func in[R Row](fieldName string, vals ...any) Query[R] {
 func NotEq(fieldName string, val any) Query32 { return notEq[uint32](fieldName, val) }
 
 //go:inline
-func notEq[R Row](fieldName string, val any) Query[R] {
-	return func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
-		eq := eq[R](fieldName, val)
+func notEq[LI Value](fieldName string, val any) Query[LI] {
+	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
+		eq := eq[LI](fieldName, val)
 		return Not(eq)(fi, allIDs)
 	}
 }
 
 // Not Not(Query)
-func Not[R Row](q Query[R]) Query[R] {
-	return func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func Not[LI Value](q Query[LI]) Query[LI] {
+	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		// can Mutate is not relevant, because allIDs are copied
 		qres, _, err := q(fi, allIDs)
 		if err != nil {
@@ -130,8 +146,8 @@ func Not[R Row](q Query[R]) Query[R] {
 }
 
 // And Query and Query
-func (q Query[R]) And(other Query[R]) Query[R] {
-	return func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func (q Query[LI]) And(other Query[LI]) Query[LI] {
+	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		result, err := ensureMutable(q(fi, allIDs))
 		if err != nil {
 			return nil, false, err
@@ -147,8 +163,8 @@ func (q Query[R]) And(other Query[R]) Query[R] {
 }
 
 // Or Query or Query
-func (q Query[R]) Or(other Query[R]) Query[R] {
-	return func(fi FieldIndexFn[R], allIDs *BitSet[R]) (_ *BitSet[R], canMutate bool, _ error) {
+func (q Query[LI]) Or(other Query[LI]) Query[LI] {
+	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		result, err := ensureMutable(q(fi, allIDs))
 		if err != nil {
 			return nil, false, err
@@ -167,7 +183,7 @@ func (q Query[R]) Or(other Query[R]) Query[R] {
 // only copy, if not mutable
 //
 //go:inline
-func ensureMutable[R Row](b *BitSet[R], canMutate bool, err error) (*BitSet[R], error) {
+func ensureMutable[LI Value](b *BitSet[LI], canMutate bool, err error) (*BitSet[LI], error) {
 	if err != nil {
 		return nil, err
 	}
