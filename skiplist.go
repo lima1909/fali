@@ -208,6 +208,51 @@ func (sl *SkipList[K, V]) Range(from, to K, visit VisitFn[K, V]) {
 	}
 }
 
+// Less calls visit for all keys < the given key
+func (sl *SkipList[K, V]) Less(key K, visit VisitFn[K, V]) {
+	if minKey, found := sl.MinKey(); found {
+		sl.Range(minKey, key, func(k K, v V) bool {
+			if k == key {
+				return false
+			}
+
+			return visit(k, v)
+		})
+	}
+}
+
+// LessEqual calls visit for all keys <= the given key
+func (sl *SkipList[K, V]) LessEqual(key K, visit VisitFn[K, V]) {
+	if minKey, found := sl.MinKey(); found {
+		sl.Range(minKey, key, func(k K, v V) bool {
+			return visit(k, v)
+		})
+	}
+}
+
+// Greater calls visit for all keys > the given key
+func (sl *SkipList[K, V]) Greater(key K, visit VisitFn[K, V]) {
+	if maxKey, found := sl.MaxKey(); found {
+		sl.Range(key, maxKey, func(k K, v V) bool {
+			if k == key {
+				// ignore, because greater
+				return true
+			}
+
+			return visit(k, v)
+		})
+	}
+}
+
+// GreaterEqual calls visit for all keys >= the given key
+func (sl *SkipList[K, V]) GreaterEqual(key K, visit VisitFn[K, V]) {
+	if maxKey, found := sl.MaxKey(); found {
+		sl.Range(key, maxKey, func(k K, v V) bool {
+			return visit(k, v)
+		})
+	}
+}
+
 // MinKey returns the first (smallest) Key
 // or the zero value and false, if the list is empty.
 func (sl *SkipList[K, V]) MinKey() (K, bool) {

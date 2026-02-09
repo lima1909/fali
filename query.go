@@ -5,8 +5,8 @@ type Relation int8
 const (
 	Equal Relation = 1 << iota
 	Less
-	Greater
 	LessEqual
+	Greater
 	GreaterEqual
 )
 

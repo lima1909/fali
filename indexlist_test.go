@@ -253,6 +253,31 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 		{name: "Opel", age: 12},
 		{name: "Mercedes", age: 5, isNew: true},
 	}, qr.Values())
+
+	qr, err = il.Query(Rel("age", LessEqual, uint8(12)))
+	assert.NoError(t, err)
+	assert.Equal(t, 3, qr.Count())
+	assert.Equal(t, []car{
+		{name: "Dacia", age: 2, color: "red"},
+		{name: "Opel", age: 12},
+		{name: "Mercedes", age: 5, isNew: true},
+	}, qr.Values())
+
+	qr, err = il.Query(Rel("age", Greater, uint8(11)))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr.Count())
+	assert.Equal(t, []car{
+		{name: "Opel", age: 12},
+		{name: "Dacia", age: 22},
+	}, qr.Values())
+
+	qr, err = il.Query(Rel("age", GreaterEqual, uint8(12)))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, qr.Count())
+	assert.Equal(t, []car{
+		{name: "Opel", age: 12},
+		{name: "Dacia", age: 22},
+	}, qr.Values())
 }
 
 func TestIndexList_StringItem(t *testing.T) {

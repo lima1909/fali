@@ -106,40 +106,37 @@ func (si *SortedIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI
 
 	switch relation {
 	case Equal:
-		bs, found := si.skipList.Get(value.(V))
-		if !found {
-			return nil, ErrValueNotFound{value}
+		if bs, found := si.skipList.Get(value.(V)); found {
+			return bs, nil
 		}
-		return bs, nil
+		return nil, ErrValueNotFound{value}
 	case Less:
-		minValue, found := si.skipList.MinKey()
-		if !found {
-			return NewBitSet[LI](), nil
-		}
-
 		result := NewBitSet[LI]()
-		si.skipList.Range(minValue, value.(V), func(v V, bs *BitSet[LI]) bool {
-			if v == value {
-				return false
-			}
-
+		si.skipList.Less(value.(V), func(v V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})
-
 		return result, nil
 	case LessEqual:
-		minValue, found := si.skipList.MinKey()
-		if !found {
-			return NewBitSet[LI](), nil
-		}
-
 		result := NewBitSet[LI]()
-		si.skipList.Range(minValue, value.(V), func(_ V, bs *BitSet[LI]) bool {
+		si.skipList.LessEqual(value.(V), func(_ V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})
-
+		return result, nil
+	case Greater:
+		result := NewBitSet[LI]()
+		si.skipList.Greater(value.(V), func(v V, bs *BitSet[LI]) bool {
+			result.Or(bs)
+			return true
+		})
+		return result, nil
+	case GreaterEqual:
+		result := NewBitSet[LI]()
+		si.skipList.GreaterEqual(value.(V), func(_ V, bs *BitSet[LI]) bool {
+			result.Or(bs)
+			return true
+		})
 		return result, nil
 	default:
 		return nil, ErrInvalidRelation{relation}

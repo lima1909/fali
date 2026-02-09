@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSplitListBase(t *testing.T) {
+func TestSplitList_Base(t *testing.T) {
 	sl := NewSkipList[int, string]()
 	assert.True(t, sl.Put(1, "a"))
 	assert.True(t, sl.Put(3, "c"))
@@ -33,7 +33,7 @@ func TestSplitListBase(t *testing.T) {
 	assert.Equal(t, "c", val)
 }
 
-func TestNilValue(t *testing.T) {
+func TestSplitList_NilValue(t *testing.T) {
 	sl := NewSkipList[string, *string]()
 	sl.Put("a", nil)
 
@@ -42,7 +42,7 @@ func TestNilValue(t *testing.T) {
 	assert.Nil(t, val)
 }
 
-func TestPutWithZeroValueKey(t *testing.T) {
+func TestSplitList_PutWithZeroValueKey(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Error("Expected panic when putting zero value as Key")
@@ -53,7 +53,7 @@ func TestPutWithZeroValueKey(t *testing.T) {
 	sl.Put("", "---")
 }
 
-func TestDeleteAndGetTheZeroValueKey(t *testing.T) {
+func TestSplitList_DeleteAndGetTheZeroValueKey(t *testing.T) {
 	sl := NewSkipList[string, string]()
 	assert.False(t, sl.Delete(""))
 
@@ -62,7 +62,7 @@ func TestDeleteAndGetTheZeroValueKey(t *testing.T) {
 	assert.Equal(t, "", val)
 }
 
-func TestTraverse(t *testing.T) {
+func TestSplitList_Traverse(t *testing.T) {
 	count := 10
 
 	sl := NewSkipList[uint32, uint32]()
@@ -88,7 +88,7 @@ func TestTraverse(t *testing.T) {
 
 }
 
-func TestRange(t *testing.T) {
+func TestSplitList_Range(t *testing.T) {
 	sl := NewSkipList[byte, uint32]()
 	sl.Put(1, 1)
 	sl.Put(3, 3)
@@ -104,7 +104,7 @@ func TestRange(t *testing.T) {
 	assert.Equal(t, []uint32{3, 4, 5}, result)
 }
 
-func TestRangeInclusiveTo(t *testing.T) {
+func TestSplitList_RangeInclusiveTo(t *testing.T) {
 	sl := NewSkipList[string, uint32]()
 	sl.Put("a", 1)
 	sl.Put("c", 3)
@@ -120,7 +120,7 @@ func TestRangeInclusiveTo(t *testing.T) {
 	assert.Equal(t, []uint32{3, 4, 5}, result)
 }
 
-func TestRangeInclusiveFromTo(t *testing.T) {
+func TestSplitList_RangeInclusiveFromTo(t *testing.T) {
 	sl := NewSkipList[int, uint32]()
 	sl.Put(2, 2)
 	sl.Put(3, 3)
@@ -136,7 +136,7 @@ func TestRangeInclusiveFromTo(t *testing.T) {
 	assert.Equal(t, []uint32{2, 3, 4, 5}, result)
 }
 
-func TestNotInRange(t *testing.T) {
+func TestSplitList_NotInRange(t *testing.T) {
 	sl := NewSkipList[uint32, uint32]()
 	sl.Put(1, 1)
 	sl.Put(3, 3)
@@ -150,7 +150,7 @@ func TestNotInRange(t *testing.T) {
 	assert.Equal(t, 0, len(result))
 }
 
-func TestFirstValue(t *testing.T) {
+func TestSplitList_FirstValue(t *testing.T) {
 	sl := NewSkipList[uint32, uint32]()
 	val, ok := sl.FirstValue()
 	assert.False(t, ok)
@@ -162,7 +162,7 @@ func TestFirstValue(t *testing.T) {
 	assert.Equal(t, uint32(1), val)
 }
 
-func TestLastValue(t *testing.T) {
+func TestSplitList_LastValue(t *testing.T) {
 	sl := NewSkipList[uint32, uint32]()
 	val, ok := sl.LastValue()
 	assert.False(t, ok)
@@ -179,7 +179,7 @@ func TestLastValue(t *testing.T) {
 	assert.Equal(t, uint32(5), val)
 }
 
-func TestMinKey(t *testing.T) {
+func TestSplitList_MinKey(t *testing.T) {
 	sl := NewSkipList[int, uint32]()
 	sl.Put(1, 2)
 	sl.Put(3, 4)
@@ -199,7 +199,7 @@ func TestMinKey(t *testing.T) {
 	assert.Equal(t, 0, k)
 }
 
-func TestMaxKey(t *testing.T) {
+func TestSplitList_MaxKey(t *testing.T) {
 	sl := NewSkipList[int, uint32]()
 	sl.Put(1, 2)
 	sl.Put(3, 4)
@@ -217,4 +217,120 @@ func TestMaxKey(t *testing.T) {
 	k, found = sl.MaxKey()
 	assert.False(t, found)
 	assert.Equal(t, 0, k)
+}
+
+func TestSplitList_Less(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	assert.True(t, sl.Put(1, "a"))
+	assert.True(t, sl.Put(3, "c"))
+	assert.True(t, sl.Put(2, "b"))
+	assert.True(t, sl.Put(5, "b"))
+
+	result := make([]int, 0)
+	sl.Less(1, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{}, result)
+
+	result = result[:0]
+	sl.Less(3, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{1, 2}, result)
+
+	result = result[:0]
+	sl.Less(99, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{1, 2, 3, 5}, result)
+}
+
+func TestSplitList_LessEqual(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	assert.True(t, sl.Put(1, "a"))
+	assert.True(t, sl.Put(3, "c"))
+	assert.True(t, sl.Put(2, "b"))
+	assert.True(t, sl.Put(5, "b"))
+
+	result := make([]int, 0)
+	sl.LessEqual(0, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{}, result)
+
+	result = result[:0]
+	sl.LessEqual(3, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{1, 2, 3}, result)
+
+	result = result[:0]
+	sl.LessEqual(99, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{1, 2, 3, 5}, result)
+}
+
+func TestSplitList_Greater(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	assert.True(t, sl.Put(1, "a"))
+	assert.True(t, sl.Put(3, "c"))
+	assert.True(t, sl.Put(2, "b"))
+	assert.True(t, sl.Put(5, "b"))
+
+	result := make([]int, 0)
+	sl.Greater(0, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{1, 2, 3, 5}, result)
+
+	result = result[:0]
+	sl.Greater(3, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{5}, result)
+
+	result = result[:0]
+	sl.Greater(99, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{}, result)
+}
+
+func TestSplitList_GreaterEqual(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	assert.True(t, sl.Put(1, "a"))
+	assert.True(t, sl.Put(3, "c"))
+	assert.True(t, sl.Put(2, "b"))
+	assert.True(t, sl.Put(5, "b"))
+
+	result := make([]int, 0)
+	sl.GreaterEqual(0, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{1, 2, 3, 5}, result)
+
+	result = result[:0]
+	sl.GreaterEqual(3, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{3, 5}, result)
+
+	result = result[:0]
+	sl.GreaterEqual(99, func(key int, val string) bool {
+		result = append(result, key)
+		return true
+	})
+	assert.Equal(t, []int{}, result)
 }
