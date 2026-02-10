@@ -122,7 +122,7 @@ func TestIndexList_Remove(t *testing.T) {
 	assert.Equal(t, 4, il.Count())
 	assert.Equal(t, c, car{name: "Dacia", age: 22})
 	// try to find item on index 3
-	qr, err = il.Query(Eq("name", "Dacia").And(Eq("age", uint8(22))))
+	qr, err = il.Query(And(Eq("name", "Dacia"), Eq("age", uint8(22))))
 	assert.NoError(t, err)
 	assert.Equal(t, 0, qr.Count())
 
@@ -245,7 +245,7 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 	assert.Equal(t, 1, qr.Count())
 	assert.Equal(t, []car{{name: "Opel", age: 12}}, qr.Values())
 
-	qr, err = il.Query(Rel("age", Less, uint8(13)))
+	qr, err = il.Query(Lt("age", uint8(13)))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 	assert.Equal(t, []car{
@@ -254,7 +254,7 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 		{name: "Mercedes", age: 5, isNew: true},
 	}, qr.Values())
 
-	qr, err = il.Query(Rel("age", LessEqual, uint8(12)))
+	qr, err = il.Query(Le("age", uint8(12)))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 	assert.Equal(t, []car{
@@ -263,7 +263,7 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 		{name: "Mercedes", age: 5, isNew: true},
 	}, qr.Values())
 
-	qr, err = il.Query(Rel("age", Greater, uint8(11)))
+	qr, err = il.Query(Gt("age", uint8(11)))
 	assert.NoError(t, err)
 	assert.Equal(t, 2, qr.Count())
 	assert.Equal(t, []car{
@@ -271,7 +271,7 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 		{name: "Dacia", age: 22},
 	}, qr.Values())
 
-	qr, err = il.Query(Rel("age", GreaterEqual, uint8(12)))
+	qr, err = il.Query(Ge("age", uint8(12)))
 	assert.NoError(t, err)
 	assert.Equal(t, 2, qr.Count())
 	assert.Equal(t, []car{
@@ -322,7 +322,7 @@ func TestIndexList_StringPtrItemWithNil(t *testing.T) {
 	assert.Equal(t, []*string{nil}, qr.Values())
 
 	// Or(IsNil, Eq(dacia)
-	qr, err = il.Query(IsNil[string]("val").Or(Eq("val", &dacia)))
+	qr, err = il.Query(Or(IsNil[string]("val"), Eq("val", &dacia)))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 	assert.Equal(t, []*string{&dacia, nil, &dacia}, qr.Values())

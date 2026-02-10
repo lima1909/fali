@@ -3,7 +3,7 @@ package main
 type Relation int8
 
 const (
-	Equal Relation = 1 << iota
+	Equal = 1 << iota
 	Less
 	LessEqual
 	Greater
@@ -48,8 +48,35 @@ func rel[LI Value](fieldName string, relation Relation, val any) Query[LI] {
 	}
 }
 
+// Eq fieldName = val
+func Eq(fieldName string, val any) Query32 {
+	return rel[uint32](fieldName, Equal, val)
+}
+
+// Lt Less fieldName < val
+func Lt(fieldName string, val any) Query32 {
+	return rel[uint32](fieldName, Less, val)
+}
+
+// Le Less Equal fieldName <= val
+func Le(fieldName string, val any) Query32 {
+	return rel[uint32](fieldName, LessEqual, val)
+}
+
+// Gt Greater fieldName > val
+func Gt(fieldName string, val any) Query32 {
+	return rel[uint32](fieldName, Greater, val)
+}
+
+// Ge Greater Equal fieldName >= val
+func Ge(fieldName string, val any) Query32 {
+	return rel[uint32](fieldName, GreaterEqual, val)
+}
+
 // IsNil is a Query which checks for a given type the nil value
-func IsNil[V any](fieldName string) Query32 { return isNil[V, uint32](fieldName) }
+func IsNil[V any](fieldName string) Query32 {
+	return isNil[V, uint32](fieldName)
+}
 
 //go:inline
 func isNil[V any, LI Value](fieldName string) Query[LI] {
@@ -64,25 +91,11 @@ func isNil[V any, LI Value](fieldName string) Query[LI] {
 	}
 }
 
-// Eq fieldName = val
-func Eq(fieldName string, val any) Query32 { return eq[uint32](fieldName, val) }
-
-//go:inline
-func eq[LI Value](fieldName string, val any) Query[LI] {
-	return func(fi FieldIndexFn[LI], _ *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
-		get, err := fi(fieldName, val)
-		if err != nil {
-			return nil, false, err
-		}
-
-		bs, err := get(Equal, val)
-		return bs, false, err
-	}
-}
-
 // In combines Eq with an Or
 // In("name", "Paul", "Egon") => name == "Paul" Or name == "Egon"
-func In(fieldName string, vals ...any) Query32 { return in[uint32](fieldName, vals...) }
+func In(fieldName string, vals ...any) Query32 {
+	return in[uint32](fieldName, vals...)
+}
 
 //go:inline
 func in[LI Value](fieldName string, vals ...any) Query[LI] {
@@ -119,12 +132,14 @@ func in[LI Value](fieldName string, vals ...any) Query[LI] {
 }
 
 // NotEq is a shorcut for Not(Eq(...))
-func NotEq(fieldName string, val any) Query32 { return notEq[uint32](fieldName, val) }
+func NotEq(fieldName string, val any) Query32 {
+	return notEq[uint32](fieldName, val)
+}
 
 //go:inline
 func notEq[LI Value](fieldName string, val any) Query[LI] {
 	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
-		eq := eq[LI](fieldName, val)
+		eq := rel[LI](fieldName, Equal, val)
 		return Not(eq)(fi, allIDs)
 	}
 }
@@ -146,13 +161,13 @@ func Not[LI Value](q Query[LI]) Query[LI] {
 }
 
 // And Query and Query
-func (q Query[LI]) And(other Query[LI]) Query[LI] {
+func And[LI Value](a Query[LI], b Query[LI]) Query[LI] {
 	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
-		result, err := ensureMutable(q(fi, allIDs))
+		result, err := ensureMutable(a(fi, allIDs))
 		if err != nil {
 			return nil, false, err
 		}
-		right, _, err := other(fi, allIDs)
+		right, _, err := b(fi, allIDs)
 		if err != nil {
 			return nil, false, err
 		}
@@ -163,13 +178,13 @@ func (q Query[LI]) And(other Query[LI]) Query[LI] {
 }
 
 // Or Query or Query
-func (q Query[LI]) Or(other Query[LI]) Query[LI] {
+func Or[LI Value](a Query[LI], b Query[LI]) Query[LI] {
 	return func(fi FieldIndexFn[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
-		result, err := ensureMutable(q(fi, allIDs))
+		result, err := ensureMutable(a(fi, allIDs))
 		if err != nil {
 			return nil, false, err
 		}
-		right, _, err := other(fi, allIDs)
+		right, _, err := b(fi, allIDs)
 		if err != nil {
 			return nil, false, err
 		}
