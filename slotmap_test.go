@@ -29,7 +29,7 @@ func TestSlotMap_Base(t *testing.T) {
 	// add "z", where "b" was (z replaced b, same Index, different Generation)
 	assert.Equal(t, Handle{1, 1}, l.Add("z"))
 
-	val, found = l.Get(Handle{1, 0})
+	_, found = l.Get(Handle{1, 0})
 	assert.False(t, found)
 
 	val, found = l.Get(Handle{1, 1})

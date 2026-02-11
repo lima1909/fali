@@ -28,3 +28,9 @@ type ErrValueNotFound struct{ value any }
 func (e ErrValueNotFound) Error() string {
 	return fmt.Sprintf("index value not found: %v", e.value)
 }
+
+type ErrNoIdIndexDefined struct{}
+
+func (e ErrNoIdIndexDefined) Error() string {
+	return fmt.Sprintln("no ID index defined")
+}

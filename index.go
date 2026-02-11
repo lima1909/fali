@@ -4,6 +4,105 @@ import (
 	"cmp"
 )
 
+// fieldIndexMap maps a given field name to an Index
+type indexMap[OBJ any] struct {
+	idIndex idIndex[OBJ]
+	index   map[string]Index32[OBJ]
+	allIDs  *BitSet[uint32]
+}
+
+func newIndexMap[OBJ any](idIndex idIndex[OBJ]) indexMap[OBJ] {
+	return indexMap[OBJ]{
+		idIndex: idIndex,
+		index:   make(map[string]Index32[OBJ]),
+		allIDs:  NewBitSet[uint32](),
+	}
+}
+
+func (i indexMap[OBJ]) Set(obj *OBJ, idx int) {
+	if i.idIndex != nil {
+		i.idIndex.Set(obj, idx)
+	}
+
+	uidx := uint32(idx)
+	i.allIDs.Set(uidx)
+	for _, fieldIndex := range i.index {
+		fieldIndex.Set(obj, uidx)
+	}
+}
+
+func (i indexMap[OBJ]) UnSet(obj *OBJ, idx int) {
+	if i.idIndex != nil {
+		i.idIndex.UnSet(obj, idx)
+	}
+
+	uidx := uint32(idx)
+	i.allIDs.UnSet(uidx)
+	for _, fieldIndex := range i.index {
+		fieldIndex.UnSet(obj, uidx)
+	}
+}
+
+func (i indexMap[OBJ]) getIndexByID(value any) (int, error) {
+	if i.idIndex == nil {
+		return 0, ErrNoIdIndexDefined{}
+	}
+
+	return i.idIndex.Get(value)
+}
+
+// IndexByName is the default impl for the FieldIndexFn
+func (i indexMap[OBJ]) IndexByName(fieldName string, val any) (QueryFieldGetFn[uint32], error) {
+	if idx, found := i.index[fieldName]; found {
+		return idx.Get, nil
+	}
+	return nil, ErrInvalidIndexdName{fieldName}
+}
+
+type idIndex[OBJ any] interface {
+	Set(*OBJ, int)
+	UnSet(*OBJ, int)
+	Get(any) (int, error)
+}
+
+type idMapIndex[OBJ any, V any] struct {
+	data       map[any]int
+	fieldGetFn func(*OBJ) V
+}
+
+func newIDMapIndex[OBJ any, V any](fieldGetFn func(*OBJ) V) idIndex[OBJ] {
+	return &idMapIndex[OBJ, V]{
+		data:       make(map[any]int),
+		fieldGetFn: fieldGetFn,
+	}
+}
+
+func (mi *idMapIndex[OBJ, V]) Set(obj *OBJ, lidx int) {
+	value := mi.fieldGetFn(obj)
+	mi.data[value] = lidx
+}
+
+func (mi *idMapIndex[OBJ, V]) UnSet(obj *OBJ, lidx int) {
+	value := mi.fieldGetFn(obj)
+	delete(mi.data, value)
+}
+
+func (mi *idMapIndex[OBJ, V]) Get(value any) (int, error) {
+	if _, ok := value.(V); !ok {
+		return 0, ErrInvalidIndexValue[V]{value}
+	}
+
+	if lidx, found := mi.data[value]; found {
+		return lidx, nil
+	}
+
+	return 0, ErrValueNotFound{value}
+}
+
+// ------------------------------------------
+// here starts the Index with the Index impls
+// ------------------------------------------
+
 // Index32 the IndexList only supported uint32 List-Indices
 type Index32[T any] = Index[T, uint32]
 

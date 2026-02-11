@@ -7,9 +7,8 @@ import (
 
 // IndexList is a list (slice), which is extended by Indices for fast finding Items in the list.
 type IndexList[T any] struct {
-	list          FreeList[T]
-	allIDs        BitSet[uint32]
-	fieldIndexMap fieldIndexMap[T]
+	list     FreeList[T]
+	indexMap indexMap[T]
 
 	lock sync.RWMutex
 }
@@ -17,9 +16,16 @@ type IndexList[T any] struct {
 // NewIndexList create a new IndexList
 func NewIndexList[T any]() *IndexList[T] {
 	return &IndexList[T]{
-		list:          NewFreeList[T](),
-		allIDs:        BitSet[uint32]{data: make([]uint64, 0)},
-		fieldIndexMap: make(fieldIndexMap[T], 0),
+		list:     NewFreeList[T](),
+		indexMap: newIndexMap[T](nil),
+	}
+}
+
+// NewIndexList create a new IndexList with an ID-Index
+func NewIndexListWithID[T any, V any](fieldIDGetFn func(*T) V) *IndexList[T] {
+	return &IndexList[T]{
+		list:     NewFreeList[T](),
+		indexMap: newIndexMap(newIDMapIndex(fieldIDGetFn)),
 	}
 }
 
@@ -35,7 +41,47 @@ func (l *IndexList[T]) CreateIndex(fieldName string, index Index32[T]) {
 		index.Set(&item, uint32(idx))
 	}
 
-	l.fieldIndexMap[fieldName] = index
+	l.indexMap.index[fieldName] = index
+}
+
+// Get returns an item by the given ID.
+// This works ONLY, if an ID is defined (with calling: NewIndexListWithID)
+// errors:
+// - wrong datatype
+// - ID not found
+// - no ID defined
+func (l *IndexList[T]) Get(id any) (T, error) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	idx, err := l.indexMap.getIndexByID(id)
+	if err != nil {
+		var null T
+		return null, err
+	}
+
+	item, found := l.list.Get(idx)
+	_ = found
+	return item, nil
+}
+
+// Remove an item by the given ID.
+// This works ONLY, if an ID is defined (with calling: NewIndexListWithID)
+// errors:
+// - wrong datatype
+// - ID not found
+// - no ID defined
+func (l *IndexList[T]) Remove(id any) (bool, error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	idx, err := l.indexMap.getIndexByID(id)
+	if err != nil {
+		return false, err
+	}
+
+	_, removed := l.removeNoLock(idx)
+	return removed, nil
 }
 
 // Add add the given Item to the list,
@@ -45,11 +91,7 @@ func (l *IndexList[T]) Add(item T) int {
 	defer l.lock.Unlock()
 
 	idx := l.list.Add(item)
-	l.allIDs.Set(uint32(idx))
-
-	for _, fieldIndex := range l.fieldIndexMap {
-		fieldIndex.Set(&item, uint32(idx))
-	}
+	l.indexMap.Set(&item, idx)
 
 	return idx
 }
@@ -57,7 +99,7 @@ func (l *IndexList[T]) Add(item T) int {
 // Query execute the given Query.
 func (l *IndexList[T]) Query(query Query32) (QueryResult[T], error) {
 	l.lock.RLock()
-	bs, _, err := query(l.fieldIndexMap.IndexByName, &l.allIDs)
+	bs, _, err := query(l.indexMap.IndexByName, l.indexMap.allIDs)
 	l.lock.RUnlock()
 
 	if err != nil {
@@ -72,7 +114,20 @@ func (l *IndexList[T]) Count() int {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	return l.allIDs.Count()
+	return l.indexMap.allIDs.Count()
+}
+
+//go:inline
+func (l *IndexList[T]) removeNoLock(index int) (t T, removed bool) {
+	item, found := l.list.Get(index)
+	if !found {
+		return item, found
+	}
+
+	removed = l.list.Remove(index)
+	l.indexMap.UnSet(&item, index)
+
+	return item, removed
 }
 
 type QueryResult[T any] struct {
@@ -114,33 +169,4 @@ func (q *QueryResult[T]) Remove() {
 		q.list.removeNoLock(int(r))
 		return true
 	})
-}
-
-func (l *IndexList[T]) removeNoLock(index int) (t T, removed bool) {
-	item, found := l.list.Get(index)
-	if !found {
-		return item, found
-	}
-
-	removed = l.list.Remove(index)
-	l.allIDs.UnSet(uint32(index))
-
-	for _, fieldIndex := range l.fieldIndexMap {
-		fieldIndex.UnSet(&item, uint32(index))
-	}
-
-	return item, removed
-}
-
-// ------------------------
-
-// fieldIndexMap maps a given field name to an Index
-type fieldIndexMap[T any] map[string]Index32[T]
-
-// IndexByName is the default impl for the FieldIndexFn
-func (f fieldIndexMap[T]) IndexByName(fieldName string, val any) (QueryFieldGetFn[uint32], error) {
-	if idx, found := f[fieldName]; found {
-		return idx.Get, nil
-	}
-	return nil, ErrInvalidIndexdName{fieldName}
 }

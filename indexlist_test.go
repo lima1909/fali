@@ -334,3 +334,48 @@ func TestIndexList_StringPtrItemWithNil(t *testing.T) {
 	_, err = il.Query(IsNil[int]("val"))
 	assert.ErrorIs(t, err, ErrInvalidIndexValue[*string]{(*int)(nil)})
 }
+
+func TestIndexList_WithID(t *testing.T) {
+	il := NewIndexListWithID(func(c *car) string { return c.name })
+	il.CreateIndex("isnew", NewMapIndex(func(c *car) bool { return c.isNew }))
+
+	il.Add(car{name: "Opel", age: 22})
+	il.Add(car{name: "Mercedes", age: 5, isNew: true})
+	il.Add(car{name: "Dacia", age: 42})
+
+	dacia, err := il.Get("Dacia")
+	assert.NoError(t, err)
+	assert.Equal(t, car{name: "Dacia", age: 42}, dacia)
+	assert.Equal(t, 3, il.Count())
+
+	// remove dacia
+	removed, err := il.Remove("Dacia")
+	assert.NoError(t, err)
+	assert.True(t, removed)
+	assert.Equal(t, 2, il.Count())
+
+	// check not found after remove
+	_, err = il.Get("Dacia")
+	assert.ErrorIs(t, err, ErrValueNotFound{"Dacia"})
+	_, err = il.Remove("Dacia")
+	assert.ErrorIs(t, err, ErrValueNotFound{"Dacia"})
+
+	// wrong datatype
+	_, err = il.Get(5)
+	assert.ErrorIs(t, err, ErrInvalidIndexValue[string]{5})
+	_, err = il.Remove(5)
+	assert.ErrorIs(t, err, ErrInvalidIndexValue[string]{5})
+}
+
+func TestIndexList_WithID_Errors(t *testing.T) {
+	il := NewIndexList[car]()
+	il.Add(car{name: "Dacia", age: 42})
+
+	// Get
+	_, err := il.Get("Dacia")
+	assert.ErrorIs(t, err, ErrNoIdIndexDefined{})
+
+	// Remove
+	_, err = il.Remove("Dacia")
+	assert.ErrorIs(t, err, ErrNoIdIndexDefined{})
+}
