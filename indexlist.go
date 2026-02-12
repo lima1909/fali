@@ -44,25 +44,16 @@ func (l *IndexList[T]) CreateIndex(fieldName string, index Index32[T]) {
 	l.indexMap.index[fieldName] = index
 }
 
-// Get returns an item by the given ID.
-// This works ONLY, if an ID is defined (with calling: NewIndexListWithID)
-// errors:
-// - wrong datatype
-// - ID not found
-// - no ID defined
-func (l *IndexList[T]) Get(id any) (T, error) {
-	l.lock.RLock()
-	defer l.lock.RUnlock()
+// Add add the given Item to the list,
+// there is NO check, for existing this Item in the list
+func (l *IndexList[T]) Add(item T) int {
+	l.lock.Lock()
+	defer l.lock.Unlock()
 
-	idx, err := l.indexMap.getIndexByID(id)
-	if err != nil {
-		var null T
-		return null, err
-	}
+	idx := l.list.Add(item)
+	l.indexMap.Set(&item, idx)
 
-	item, found := l.list.Get(idx)
-	_ = found
-	return item, nil
+	return idx
 }
 
 // Remove an item by the given ID.
@@ -84,16 +75,38 @@ func (l *IndexList[T]) Remove(id any) (bool, error) {
 	return removed, nil
 }
 
-// Add add the given Item to the list,
-// there is NO check, for existing this Item in the list
-func (l *IndexList[T]) Add(item T) int {
-	l.lock.Lock()
-	defer l.lock.Unlock()
+// Get returns an item by the given ID.
+// This works ONLY, if an ID is defined (with calling: NewIndexListWithID)
+// errors:
+// - wrong datatype
+// - ID not found
+// - no ID defined
+func (l *IndexList[T]) Get(id any) (T, error) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
 
-	idx := l.list.Add(item)
-	l.indexMap.Set(&item, idx)
+	idx, err := l.indexMap.getIndexByID(id)
+	if err != nil {
+		var null T
+		return null, err
+	}
 
-	return idx
+	// not found should be possible
+	item, _ := l.list.Get(idx)
+	return item, nil
+}
+
+// ContainsID check, is this ID found in the list.
+func (l *IndexList[T]) ContainsID(id any) bool {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	_, err := l.indexMap.getIndexByID(id)
+	if err != nil {
+		return false
+	}
+
+	return true
 }
 
 // Query execute the given Query.

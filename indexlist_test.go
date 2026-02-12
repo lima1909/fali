@@ -347,6 +347,8 @@ func TestIndexList_WithID(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, car{name: "Dacia", age: 42}, dacia)
 	assert.Equal(t, 3, il.Count())
+	assert.True(t, il.ContainsID("Dacia"))
+	assert.False(t, il.ContainsID("NotFound"))
 
 	// remove dacia
 	removed, err := il.Remove("Dacia")

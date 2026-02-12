@@ -51,6 +51,14 @@ func (i indexMap[OBJ]) getIndexByID(value any) (int, error) {
 	return i.idIndex.Get(value)
 }
 
+// func (i indexMap[OBJ]) getID(obj *OBJ) (any, error) {
+// 	if i.idIndex == nil {
+// 		return nil, ErrNoIdIndexDefined{}
+// 	}
+//
+// 	return i.idIndex.GetID(obj), nil
+// }
+
 // IndexByName is the default impl for the FieldIndexFn
 func (i indexMap[OBJ]) IndexByName(fieldName string, val any) (QueryFieldGetFn[uint32], error) {
 	if idx, found := i.index[fieldName]; found {
@@ -63,6 +71,7 @@ type idIndex[OBJ any] interface {
 	Set(*OBJ, int)
 	UnSet(*OBJ, int)
 	Get(any) (int, error)
+	GetID(*OBJ) any
 }
 
 type idMapIndex[OBJ any, V any] struct {
@@ -97,6 +106,10 @@ func (mi *idMapIndex[OBJ, V]) Get(value any) (int, error) {
 	}
 
 	return 0, ErrValueNotFound{value}
+}
+
+func (mi *idMapIndex[OBJ, V]) GetID(obj *OBJ) any {
+	return mi.fieldGetFn(obj)
 }
 
 // ------------------------------------------
