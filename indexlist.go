@@ -102,11 +102,7 @@ func (l *IndexList[T]) ContainsID(id any) bool {
 	defer l.lock.RUnlock()
 
 	_, err := l.indexMap.getIndexByID(id)
-	if err != nil {
-		return false
-	}
-
-	return true
+	return err == nil
 }
 
 // Query execute the given Query.
