@@ -12,10 +12,10 @@ func unSet[T any](idx Index32[T], t T, r uint32) { idx.UnSet(&t, r) }
 func stringGetFn(t *string) string { return *t }
 func intGetFn(t *int) int          { return *t }
 
-func fieldIndexMapFn[T any](mi Index32[T]) FieldIndexFn[uint32] {
-	return func(fieldName string, _ any) (QueryFieldGetFn[uint32], error) {
+func fieldIndexMapFn[T any](mi Index32[T]) LookupByName32 {
+	return func(fieldName string) (Lookup32, error) {
 		if fieldName == "val" {
-			return mi.Get, nil
+			return mi, nil
 		}
 
 		return nil, ErrInvalidIndexdName{fieldName}
@@ -116,16 +116,32 @@ func TestMapIndex_Query(t *testing.T) {
 	assert.Nil(t, result)
 
 	// OR
+	result, canMutate, err = Or(Eq("val", 3), Eq("val", 42), Eq("val", 1))(fi, nil)
+	assert.NoError(t, err)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint32{1, 3, 5, 42}, result.ToSlice())
+	// three ORs
 	result, canMutate, err = Or(Eq("val", 3), Eq("val", 1))(fi, nil)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint32{1, 3, 5}, result.ToSlice())
 
-	// And
-	result, canMutate, err = And(Eq("val", 3), Eq("val", 3))(fi, nil)
+	// AND
+	result, canMutate, err = And(Eq("val", 3), Not(Eq("val", 3)))(fi, NewBitSetFrom[uint32](1, 3, 5, 42))
+	assert.NoError(t, err)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint32{}, result.ToSlice())
+	// three Ands
+	result, canMutate, err = And(Eq("val", 3), Eq("val", 3), Eq("val", 3))(fi, nil)
 	assert.NoError(t, err)
 	assert.True(t, canMutate)
 	assert.Equal(t, []uint32{3, 5}, result.ToSlice())
+
+	// combine OR and AND
+	result, canMutate, err = Or(Eq("val", 1), And(Eq("val", 3), Eq("val", 3)))(fi, nil)
+	assert.NoError(t, err)
+	assert.True(t, canMutate)
+	assert.Equal(t, []uint32{1, 3, 5}, result.ToSlice())
 
 	// after and | or, to check the original BitSet is not changed
 	bs, _ := mi.Get(Equal, 1)

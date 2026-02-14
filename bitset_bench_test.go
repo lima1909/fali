@@ -121,9 +121,25 @@ func BenchmarkBitSetValuesIter(b *testing.B) {
 			_ = v
 			c += 1
 			return true
-
 		})
+		assert.Equal(b, count, c)
 
+	}
+}
+
+func BenchmarkBitSetValuesBatchIter(b *testing.B) {
+	bs := NewBitSet[uint32]()
+	for i := 1; i <= count; i++ {
+		bs.Set(uint32(i))
+	}
+	b.ResetTimer()
+
+	for b.Loop() {
+		c := 0
+		bs.ValuesBatch(func(v []uint32) bool {
+			c += len(v)
+			return true
+		})
 		assert.Equal(b, count, c)
 
 	}

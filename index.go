@@ -19,6 +19,14 @@ func newIndexMap[OBJ any](idIndex idIndex[OBJ]) indexMap[OBJ] {
 	}
 }
 
+// LookupByName finds the Lookup by a given field-name
+func (i indexMap[OBJ]) LookupByName(fieldName string) (Lookup32, error) {
+	if idx, found := i.index[fieldName]; found {
+		return idx, nil
+	}
+	return nil, ErrInvalidIndexdName{fieldName}
+}
+
 func (i indexMap[OBJ]) Set(obj *OBJ, idx int) {
 	if i.idIndex != nil {
 		i.idIndex.Set(obj, idx)
@@ -51,27 +59,10 @@ func (i indexMap[OBJ]) getIndexByID(value any) (int, error) {
 	return i.idIndex.Get(value)
 }
 
-// func (i indexMap[OBJ]) getID(obj *OBJ) (any, error) {
-// 	if i.idIndex == nil {
-// 		return nil, ErrNoIdIndexDefined{}
-// 	}
-//
-// 	return i.idIndex.GetID(obj), nil
-// }
-
-// IndexByName is the default impl for the FieldIndexFn
-func (i indexMap[OBJ]) IndexByName(fieldName string, val any) (QueryFieldGetFn[uint32], error) {
-	if idx, found := i.index[fieldName]; found {
-		return idx.Get, nil
-	}
-	return nil, ErrInvalidIndexdName{fieldName}
-}
-
 type idIndex[OBJ any] interface {
 	Set(*OBJ, int)
 	UnSet(*OBJ, int)
 	Get(any) (int, error)
-	GetID(*OBJ) any
 }
 
 type idMapIndex[OBJ any, V any] struct {
@@ -108,15 +99,11 @@ func (mi *idMapIndex[OBJ, V]) Get(value any) (int, error) {
 	return 0, ErrValueNotFound{value}
 }
 
-func (mi *idMapIndex[OBJ, V]) GetID(obj *OBJ) any {
-	return mi.fieldGetFn(obj)
-}
-
 // ------------------------------------------
 // here starts the Index with the Index impls
 // ------------------------------------------
 
-// Index32 the IndexList only supported uint32 List-Indices
+// Index32 the IndexList only supports uint32 List-Indices
 type Index32[T any] = Index[T, uint32]
 
 // Index is interface for handling the mapping of an Value: V to an List-Index: LI
@@ -124,6 +111,14 @@ type Index32[T any] = Index[T, uint32]
 type Index[OBJ any, LI Value] interface {
 	Set(*OBJ, LI)
 	UnSet(*OBJ, LI)
+	Lookup[LI]
+}
+
+// Lookup32 the IndexList only supports uint32 List-Indices
+type Lookup32 = Lookup[uint32]
+
+// Lookup returns the BitSet or an error by a given Relation and Value
+type Lookup[LI Value] interface {
 	Get(Relation, any) (*BitSet[LI], error)
 }
 

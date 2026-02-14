@@ -74,6 +74,14 @@ func TestBitSetAnd(t *testing.T) {
 	result = b1.Copy()
 	result.And(b2)
 	assert.Equal(t, []uint32{110}, result.ToSlice())
+
+	b0 := NewBitSet[uint32]()
+	b0.And(b1)
+	assert.Equal(t, 0, b0.Count())
+
+	// b1 is removed
+	b1.And(b0)
+	assert.Equal(t, 0, b1.Count())
 }
 
 func TestBitSetOr(t *testing.T) {
@@ -88,6 +96,15 @@ func TestBitSetOr(t *testing.T) {
 	result = b1.Copy()
 	result.Or(b2)
 	assert.Equal(t, []uint32{1, 2, 110, 2345}, result.ToSlice())
+
+	b0 := NewBitSet[uint32]()
+	result = b0.Copy()
+	result.Or(b1)
+	assert.Equal(t, []uint32{110}, result.ToSlice())
+
+	// b1 is removed
+	b1.Or(b0)
+	assert.Equal(t, []uint32{110}, result.ToSlice())
 }
 
 func TestBitSetOr2(t *testing.T) {
@@ -120,6 +137,21 @@ func TestBitSetXor(t *testing.T) {
 	result = b1.Copy()
 	result.Xor(b2)
 	assert.Equal(t, []uint32{1, 2, 2345}, result.ToSlice())
+
+	// no overlap
+	b3 := NewBitSetFrom[uint32](3)
+	result = b3.Copy()
+	result.Xor(b1)
+	assert.Equal(t, []uint32{3, 110}, result.ToSlice())
+
+	b0 := NewBitSet[uint32]()
+	result = b0.Copy()
+	result.Or(b1)
+	assert.Equal(t, []uint32{110}, result.ToSlice())
+
+	// b1 is removed
+	b1.Or(b0)
+	assert.Equal(t, []uint32{110}, result.ToSlice())
 }
 
 func TestBitSetAndNot(t *testing.T) {
@@ -135,6 +167,14 @@ func TestBitSetAndNot(t *testing.T) {
 	result.AndNot(b2)
 	result.Shrink()
 	assert.Equal(t, NewBitSetFrom[uint64](), result)
+
+	b0 := NewBitSet[uint64]()
+	b0.AndNot(b1)
+	assert.Equal(t, 0, b0.Count())
+
+	// b1 is removed
+	b1.AndNot(b0)
+	assert.Equal(t, []uint64{2, 110}, b1.ToSlice())
 }
 
 func TestBitSetMinMax(t *testing.T) {

@@ -108,7 +108,7 @@ func (l *IndexList[T]) ContainsID(id any) bool {
 // Query execute the given Query.
 func (l *IndexList[T]) Query(query Query32) (QueryResult[T], error) {
 	l.lock.RLock()
-	bs, _, err := query(l.indexMap.IndexByName, l.indexMap.allIDs)
+	bs, _, err := query(l.indexMap.LookupByName, l.indexMap.allIDs)
 	l.lock.RUnlock()
 
 	if err != nil {

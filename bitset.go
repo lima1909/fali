@@ -18,55 +18,72 @@ func NewBitSet[V Value]() *BitSet[V] {
 }
 
 // NewBitSetWithCapacity creates a new BitSet with starting capacity
-func NewBitSetWithCapacity[V Value](size int) *BitSet[V] {
-	return &BitSet[V]{data: make([]uint64, 0, size)}
+func NewBitSetWithCapacity[V Value](bits int) *BitSet[V] {
+	words := (bits + 63) >> 6
+	return &BitSet[V]{data: make([]uint64, 0, words)}
 }
 
 // NewBitSetFrom creates a new BitSet from given values
 func NewBitSetFrom[V Value](values ...V) *BitSet[V] {
-	b := NewBitSetWithCapacity[V](len(values))
+	var maxVal V
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	b := NewBitSetWithCapacity[V](int(maxVal) + 1)
 	for _, v := range values {
 		b.Set(v)
 	}
+
 	return b
+}
+
+//go:inline
+func (b *BitSet[V]) grow(targetIndex int) {
+	needed := targetIndex + 1 - len(b.data)
+	if needed > 0 {
+		// runtime optimizes this allocation pattern heavily.
+		// it will handle the capacity doubling strategy for us.
+		b.data = append(b.data, make([]uint64, needed)...)
+	}
 }
 
 // Set inserts or updates the key in the BitSet
 func (b *BitSet[V]) Set(value V) {
-	l := V(len(b.data))
-	idx := value >> 6
-
-	if idx >= l {
-		// resize the slice if necessary
-		newCap := max(idx+1, l*2)
-		newData := make([]uint64, newCap)
-		copy(newData, b.data)
-		b.data = newData
-	}
-
-	b.data[idx] |= (1 << (value & 63))
-
 	// i>>6 is equals i/64 but faster
 	// i&63 is the same: i%64, but faster
+
+	index := int(value) >> 6
+	bit := uint64(1) << (value & 63)
+
+	if index >= len(b.data) {
+		b.grow(index)
+	}
+
+	b.data[index] |= bit
 }
 
 // UnSet removes the key from the BitSet. Clear the bit value to 0.
 func (b *BitSet[V]) UnSet(value V) bool {
-	if int(value)>>6 >= len(b.data) {
-		return false
+	index := int(value) >> 6
+	if index < len(b.data) {
+		b.data[index] &^= (1 << (value & 63))
+		return true
 	}
 
-	b.data[value>>6] &^= (1 << (value & 63))
-	return true
+	return false
 }
 
 // Contains check, is the value saved in the BitSet
 func (b *BitSet[V]) Contains(value V) bool {
-	if int(value)>>6 >= len(b.data) {
+	index := int(value) >> 6
+	if index >= len(b.data) {
 		return false
 	}
 
-	return (b.data[value>>6] & (1 << (value & 63))) != 0
+	return (b.data[index] & (1 << (value & 63))) != 0
 }
 
 // Min return the min value where an Bit is set
@@ -124,25 +141,18 @@ func (b *BitSet[V]) MaxSetIndex() int {
 
 // Counts how many values are in the BitSet, bits are set.
 func (b *BitSet[V]) Count() int {
-	bd := b.data
 	count := 0
-
-	for _, w := range bd {
+	for _, w := range b.data {
 		count += bits.OnesCount64(w)
 	}
-
 	return count
 }
 
 // Len returns the len of the bit slice
-func (b *BitSet[V]) Len() int {
-	return len(b.data)
-}
+func (b *BitSet[V]) Len() int { return len(b.data) }
 
 // how many bytes is using
-func (b *BitSet[V]) usedBytes() int {
-	return 24 + (len(b.data) * 8)
-}
+func (b *BitSet[V]) usedBytes() int { return 24 + (len(b.data) * 8) }
 
 // Copy copy the complete BitSet.
 func (b *BitSet[V]) Copy() *BitSet[V] {
@@ -170,32 +180,16 @@ func (b *BitSet[V]) CopyInto(buf []uint64) *BitSet[V] {
 // And is the logical AND of two BitSet
 // In this BitSet is the result, this means the values will be overwritten!
 func (b *BitSet[V]) And(other *BitSet[V]) {
-	bd := b.data
-	od := other.data
+	l := min(len(b.data), len(other.data))
+	b.data = b.data[:l]
 
-	l := min(len(bd), len(od))
+	// BCE: Bounds Check Elimination
+	a := b.data
+	o := other.data[:l]
 
-	// Bounds Check Elimination
-	a := bd[:l]
-	o := od[:l]
-
-	// process 4 words (256 bits) per iteration.
-	i := 0
-	for ; i <= l-4; i += 4 {
-		a[i] &= o[i]
-		a[i+1] &= o[i+1]
-		a[i+2] &= o[i+2]
-		a[i+3] &= o[i+3]
-	}
-
-	// handle remaining elements (the tail)
-	for ; i < l; i++ {
+	for i := range l {
 		a[i] &= o[i]
 	}
-
-	// remove the tail
-	// This updates the 'len', but the 'cap' (memory) remains.
-	b.data = a
 }
 
 // Or is the logical OR of two BitSet
@@ -203,14 +197,8 @@ func (b *BitSet[V]) Or(other *BitSet[V]) {
 	od := other.data
 	ol := len(od)
 
-	if len(b.data) < ol {
-		if cap(b.data) < ol {
-			newD := make([]uint64, ol)
-			copy(newD, b.data)
-			b.data = newD
-		} else {
-			b.data = b.data[:ol]
-		}
+	if len(b.data) < ol && cap(b.data) < ol {
+		b.grow(ol - 1)
 	}
 
 	// BCE (Bounds Check Elimination)
@@ -218,17 +206,7 @@ func (b *BitSet[V]) Or(other *BitSet[V]) {
 	dst := b.data[:ol]
 	src := od
 
-	// unrolled Loop for the overlapping part
-	i := 0
-	for ; i <= ol-4; i += 4 {
-		dst[i] |= src[i]
-		dst[i+1] |= src[i+1]
-		dst[i+2] |= src[i+2]
-		dst[i+3] |= src[i+3]
-	}
-
-	// clean up the remainder
-	for ; i < ol; i++ {
+	for i := range ol {
 		dst[i] |= src[i]
 	}
 
@@ -238,48 +216,31 @@ func (b *BitSet[V]) Or(other *BitSet[V]) {
 
 // XOr is the logical XOR of two BitSet
 func (b *BitSet[V]) Xor(other *BitSet[V]) {
-	od := other.data
-	ol := len(od)
 	bl := len(b.data)
+	ol := len(other.data)
 
-	common := ol
-	if bl < ol {
-		if cap(b.data) < ol {
-			newD := make([]uint64, ol)
-			copy(newD, b.data)
-			b.data = newD
-		} else {
-			b.data = b.data[:ol]
-		}
-		common = bl
+	overlap := min(bl, ol)
+	if overlap == 0 {
+		return
 	}
 
-	// setup BCE (Bounds Check Elimination)
-	// only XOR up to the 'common' length (where both have data)
-	dst := b.data[:common]
-	src := od[:common]
-
-	// unrolled Loop for the overlapping part
-	i := 0
-	for ; i <= common-4; i += 4 {
-		dst[i] ^= src[i]
-		dst[i+1] ^= src[i+1]
-		dst[i+2] ^= src[i+2]
-		dst[i+3] ^= src[i+3]
-	}
-
-	for ; i < common; i++ {
-		dst[i] ^= src[i]
-	}
-
-	// handle the Tail
-	// if other was longer than b, the tail of other should be copied into b.
-	// (Because 0 XOR Value = Value)
+	// If 'other' is longer, we simply append its tail to 'b'.
+	// Why? Because: 0 (current tail of b) XOR Value (tail of other) = Value.
 	if ol > bl {
-		copy(b.data[bl:], od[bl:])
+		b.data = append(b.data, other.data[len(b.data):]...)
 	}
-	// Note: If b was longer than other, the tail of b remains as is.
-	// (Because Value XOR 0 = Value)
+
+	// if 'b' is longer, its tail remains untouched.
+	// value (tail of b) XOR 0 (implicit tail of other) = Value.
+	bd := b.data
+	od := other.data
+
+	_ = bd[overlap-1]
+	_ = od[overlap-1]
+
+	for i := range overlap {
+		bd[i] ^= od[i]
+	}
 }
 
 // AndNot removes all elements from the current set that exist in another set.
@@ -287,30 +248,21 @@ func (b *BitSet[V]) Xor(other *BitSet[V]) {
 //
 // Example: [1, 2, 110, 2345] AndNot [2, 110] => [1, 2345]
 func (b *BitSet[V]) AndNot(other *BitSet[V]) {
+	if len(other.data) == 0 || len(b.data) == 0 {
+		return
+	}
+
 	bd := b.data
 	od := other.data
-
 	l := min(len(bd), len(od))
-	// BCE (Bounds Check Elimination)
-	a := bd[:l]
-	o := od[:l]
 
-	// unrolling (Process 4 words per iteration)
-	i := 0
-	for ; i <= l-4; i += 4 {
-		a[i] &^= o[i]
-		a[i+1] &^= o[i+1]
-		a[i+2] &^= o[i+2]
-		a[i+3] &^= o[i+3]
+	// eliminates checks inside the loop.
+	_ = bd[l-1]
+	_ = od[l-1]
+
+	for i := range l {
+		bd[i] &^= od[i]
 	}
-
-	// handle remaining elements
-	for ; i < l; i++ {
-		a[i] &^= o[i]
-	}
-
-	// Note: b.data's tail beyond 'l' is left untouched.
-	// 1 &^ 0 = 1, so the bits naturally stay set.
 }
 
 // Shrink trims the bitset to ensure that len(b.data) always points to the last truly useful word.
@@ -329,14 +281,12 @@ func (b *BitSet[V]) Shrink() {
 		i--
 	}
 
-	// update length once
 	b.data = bd[:i+1]
 }
 
 // Values iterate over the complete BitSet and call the yield function, for every value
 func (b *BitSet[V]) Values(yield func(V) bool) {
-	bd := b.data
-	for i, w := range bd {
+	for i, w := range b.data {
 		for w != 0 {
 			t := bits.TrailingZeros64(w)
 			val := (i << 6) + t
@@ -345,6 +295,35 @@ func (b *BitSet[V]) Values(yield func(V) bool) {
 			}
 			w &= (w - 1)
 		}
+	}
+}
+
+func (b *BitSet[V]) ValuesBatch(yield func([]V) bool) {
+	const batchSize = 256
+	buffer := make([]V, batchSize)
+	pos := 0
+
+	for i, w := range b.data {
+		base := i << 6
+		for w != 0 {
+			t := bits.TrailingZeros64(w)
+			buffer[pos] = V(base + t)
+			pos++
+
+			// If buffer is full, yield the whole batch
+			if pos == batchSize {
+				if !yield(buffer) {
+					return
+				}
+				pos = 0
+			}
+			w &= (w - 1)
+		}
+	}
+
+	// Yield the final partial batch
+	if pos > 0 {
+		yield(buffer[:pos])
 	}
 }
 
