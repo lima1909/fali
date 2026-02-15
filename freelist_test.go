@@ -6,11 +6,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFreeListBase(t *testing.T) {
+func TestFreeList_Base(t *testing.T) {
 	l := NewFreeList[string]()
-	assert.Equal(t, 0, l.Add("a"))
-	assert.Equal(t, 1, l.Add("b"))
-	assert.Equal(t, 2, l.Add("c"))
+	assert.Equal(t, 0, l.Insert("a"))
+	assert.Equal(t, 1, l.Insert("b"))
+	assert.Equal(t, 2, l.Insert("c"))
 
 	val, found := l.Get(1)
 	assert.True(t, found)
@@ -23,20 +23,43 @@ func TestFreeListBase(t *testing.T) {
 	assert.False(t, found)
 	assert.Equal(t, "", val)
 
-	l.Add("z")
+	l.Insert("z")
 	val, found = l.Get(1)
 	assert.True(t, found)
 	assert.Equal(t, "z", val)
 }
 
-func TestFreeListCompactUnstable(t *testing.T) {
+func TestFreeList_Update(t *testing.T) {
 	l := NewFreeList[string]()
-	l.Add("a")
-	l.Add("b")
-	l.Add("c")
-	l.Add("d")
-	l.Add("e")
-	l.Add("f")
+	assert.Equal(t, 0, l.Insert("a"))
+	assert.Equal(t, 1, l.Insert("b"))
+	assert.Equal(t, 2, l.Insert("c"))
+
+	old, ok := l.Set(1, "z")
+	assert.True(t, ok)
+	assert.Equal(t, "b", old)
+
+	// index to big
+	_, ok = l.Set(100, "z")
+	assert.False(t, ok)
+	// negative index
+	_, ok = l.Set(-100, "z")
+	assert.False(t, ok)
+
+	// index not found
+	assert.True(t, l.Remove(1))
+	_, ok = l.Set(1, "z")
+	assert.False(t, ok)
+}
+
+func TestFreeList_CompactUnstable(t *testing.T) {
+	l := NewFreeList[string]()
+	l.Insert("a")
+	l.Insert("b")
+	l.Insert("c")
+	l.Insert("d")
+	l.Insert("e")
+	l.Insert("f")
 
 	l.Remove(1) // b
 	l.Remove(2) // c
@@ -58,14 +81,14 @@ func TestFreeListCompactUnstable(t *testing.T) {
 	assert.Equal(t, "f", val)
 }
 
-func TestFreeListCompactLinear(t *testing.T) {
+func TestFreeList_CompactLinear(t *testing.T) {
 	l := NewFreeList[string]()
-	l.Add("a")
-	l.Add("b")
-	l.Add("c")
-	l.Add("d")
-	l.Add("e")
-	l.Add("f")
+	l.Insert("a")
+	l.Insert("b")
+	l.Insert("c")
+	l.Insert("d")
+	l.Insert("e")
+	l.Insert("f")
 
 	l.Remove(1) // b
 	l.Remove(2) // c
@@ -94,9 +117,9 @@ func TestFreeListCompactLinear(t *testing.T) {
 
 func TestFreeList_Iter(t *testing.T) {
 	l := NewFreeList[string]()
-	assert.Equal(t, 0, l.Add("a"))
-	assert.Equal(t, 1, l.Add("b"))
-	assert.Equal(t, 2, l.Add("c"))
+	assert.Equal(t, 0, l.Insert("a"))
+	assert.Equal(t, 1, l.Insert("b"))
+	assert.Equal(t, 2, l.Insert("c"))
 
 	for idx, item := range l.Iter() {
 		switch idx {

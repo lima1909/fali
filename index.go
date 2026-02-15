@@ -5,14 +5,14 @@ import (
 )
 
 // fieldIndexMap maps a given field name to an Index
-type indexMap[OBJ any] struct {
-	idIndex idIndex[OBJ]
+type indexMap[OBJ any, ID comparable] struct {
+	idIndex idIndex[OBJ, ID]
 	index   map[string]Index32[OBJ]
 	allIDs  *BitSet[uint32]
 }
 
-func newIndexMap[OBJ any](idIndex idIndex[OBJ]) indexMap[OBJ] {
-	return indexMap[OBJ]{
+func newIndexMap[OBJ any, ID comparable](idIndex idIndex[OBJ, ID]) indexMap[OBJ, ID] {
+	return indexMap[OBJ, ID]{
 		idIndex: idIndex,
 		index:   make(map[string]Index32[OBJ]),
 		allIDs:  NewBitSet[uint32](),
@@ -20,14 +20,14 @@ func newIndexMap[OBJ any](idIndex idIndex[OBJ]) indexMap[OBJ] {
 }
 
 // LookupByName finds the Lookup by a given field-name
-func (i indexMap[OBJ]) LookupByName(fieldName string) (Lookup32, error) {
+func (i indexMap[OBJ, ID]) LookupByName(fieldName string) (Lookup32, error) {
 	if idx, found := i.index[fieldName]; found {
 		return idx, nil
 	}
 	return nil, ErrInvalidIndexdName{fieldName}
 }
 
-func (i indexMap[OBJ]) Set(obj *OBJ, idx int) {
+func (i indexMap[OBJ, ID]) Set(obj *OBJ, idx int) {
 	if i.idIndex != nil {
 		i.idIndex.Set(obj, idx)
 	}
@@ -39,7 +39,7 @@ func (i indexMap[OBJ]) Set(obj *OBJ, idx int) {
 	}
 }
 
-func (i indexMap[OBJ]) UnSet(obj *OBJ, idx int) {
+func (i indexMap[OBJ, ID]) UnSet(obj *OBJ, idx int) {
 	if i.idIndex != nil {
 		i.idIndex.UnSet(obj, idx)
 	}
@@ -51,52 +51,68 @@ func (i indexMap[OBJ]) UnSet(obj *OBJ, idx int) {
 	}
 }
 
-func (i indexMap[OBJ]) getIndexByID(value any) (int, error) {
+func (i indexMap[OBJ, ID]) getIndexByID(id ID) (int, error) {
 	if i.idIndex == nil {
 		return 0, ErrNoIdIndexDefined{}
 	}
 
-	return i.idIndex.Get(value)
+	return i.idIndex.Get(id)
 }
 
-type idIndex[OBJ any] interface {
+func (i indexMap[OBJ, ID]) getIDByItem(item *OBJ) (ID, int, error) {
+	if i.idIndex == nil {
+		var id ID
+		return id, 0, ErrNoIdIndexDefined{}
+	}
+
+	return i.idIndex.GetID(item)
+}
+
+type idIndex[OBJ any, ID comparable] interface {
 	Set(*OBJ, int)
 	UnSet(*OBJ, int)
-	Get(any) (int, error)
+	Get(ID) (int, error)
+	GetID(*OBJ) (ID, int, error)
 }
 
-type idMapIndex[OBJ any, V any] struct {
-	data       map[any]int
-	fieldGetFn func(*OBJ) V
+type idMapIndex[OBJ any, ID comparable] struct {
+	data       map[ID]int
+	fieldGetFn func(*OBJ) ID
 }
 
-func newIDMapIndex[OBJ any, V any](fieldGetFn func(*OBJ) V) idIndex[OBJ] {
-	return &idMapIndex[OBJ, V]{
-		data:       make(map[any]int),
+func newIDMapIndex[OBJ any, ID comparable](fieldGetFn func(*OBJ) ID) idIndex[OBJ, ID] {
+	return &idMapIndex[OBJ, ID]{
+		data:       make(map[ID]int),
 		fieldGetFn: fieldGetFn,
 	}
 }
 
-func (mi *idMapIndex[OBJ, V]) Set(obj *OBJ, lidx int) {
-	value := mi.fieldGetFn(obj)
-	mi.data[value] = lidx
+func (mi *idMapIndex[OBJ, ID]) Set(obj *OBJ, lidx int) {
+	id := mi.fieldGetFn(obj)
+	mi.data[id] = lidx
 }
 
-func (mi *idMapIndex[OBJ, V]) UnSet(obj *OBJ, lidx int) {
-	value := mi.fieldGetFn(obj)
-	delete(mi.data, value)
+func (mi *idMapIndex[OBJ, ID]) UnSet(obj *OBJ, lidx int) {
+	id := mi.fieldGetFn(obj)
+	delete(mi.data, id)
 }
 
-func (mi *idMapIndex[OBJ, V]) Get(value any) (int, error) {
-	if _, ok := value.(V); !ok {
-		return 0, ErrInvalidIndexValue[V]{value}
-	}
-
-	if lidx, found := mi.data[value]; found {
+func (mi *idMapIndex[OBJ, ID]) Get(id ID) (int, error) {
+	if lidx, found := mi.data[id]; found {
 		return lidx, nil
 	}
 
-	return 0, ErrValueNotFound{value}
+	return 0, ErrValueNotFound{id}
+}
+
+func (mi *idMapIndex[OBJ, ID]) GetID(item *OBJ) (ID, int, error) {
+	id := mi.fieldGetFn(item)
+	if lidx, found := mi.data[id]; found {
+		return id, lidx, nil
+	}
+
+	var null ID
+	return null, 0, ErrValueNotFound{id}
 }
 
 // ------------------------------------------

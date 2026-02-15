@@ -23,8 +23,8 @@ func NewFreeList[T any]() FreeList[T] {
 	}
 }
 
-// Add an Item to the end of the List or use a free slot, to add this item
-func (l *FreeList[T]) Add(item T) int {
+// Insert an Item to the end of the List or use a free slot, to add this item
+func (l *FreeList[T]) Insert(item T) int {
 	// no free slots in the list, append to the end
 	if l.freeHead == -1 {
 		idx := len(l.slots)
@@ -82,6 +82,19 @@ func (l *FreeList[T]) Get(index int) (T, bool) {
 	}
 
 	return slot.value, true
+}
+
+// Set replaced the Item on the given index, with the given Item. Return the old Item and true.
+// If the given index has no Item, then will the return the zero Value of T and false.
+// index must be >=0 and < len(slots), otherwise return Set zero value and false and do nothing.
+func (l *FreeList[T]) Set(index int, newItem T) (T, bool) {
+	if oldItem, found := l.Get(index); found {
+		l.slots[index].value = newItem
+		return oldItem, true
+	}
+
+	var null T
+	return null, false
 }
 
 // Iter create an Iterator, to iterate over all saved Indices and Items

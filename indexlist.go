@@ -6,24 +6,24 @@ import (
 )
 
 // IndexList is a list (slice), which is extended by Indices for fast finding Items in the list.
-type IndexList[T any] struct {
+type IndexList[T any, ID comparable] struct {
 	list     FreeList[T]
-	indexMap indexMap[T]
+	indexMap indexMap[T, ID]
 
 	lock sync.RWMutex
 }
 
 // NewIndexList create a new IndexList
-func NewIndexList[T any]() *IndexList[T] {
-	return &IndexList[T]{
+func NewIndexList[T any]() *IndexList[T, struct{}] {
+	return &IndexList[T, struct{}]{
 		list:     NewFreeList[T](),
-		indexMap: newIndexMap[T](nil),
+		indexMap: newIndexMap[T, struct{}](nil),
 	}
 }
 
 // NewIndexList create a new IndexList with an ID-Index
-func NewIndexListWithID[T any, V any](fieldIDGetFn func(*T) V) *IndexList[T] {
-	return &IndexList[T]{
+func NewIndexListWithID[T any, ID comparable](fieldIDGetFn func(*T) ID) *IndexList[T, ID] {
+	return &IndexList[T, ID]{
 		list:     NewFreeList[T](),
 		indexMap: newIndexMap(newIDMapIndex(fieldIDGetFn)),
 	}
@@ -33,7 +33,7 @@ func NewIndexListWithID[T any, V any](fieldIDGetFn func(*T) V) *IndexList[T] {
 //   - fieldName: a name for a field of the saved Item
 //   - fieldGetFn: a function, which returns the value of an field
 //   - Index: a impl of the Index interface
-func (l *IndexList[T]) CreateIndex(fieldName string, index Index32[T]) {
+func (l *IndexList[T, ID]) CreateIndex(fieldName string, index Index32[T]) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -44,16 +44,42 @@ func (l *IndexList[T]) CreateIndex(fieldName string, index Index32[T]) {
 	l.indexMap.index[fieldName] = index
 }
 
-// Add add the given Item to the list,
-// there is NO check, for existing this Item in the list
-func (l *IndexList[T]) Add(item T) int {
+// Insert add the given Item to the list,
+// There is NO check, for existing this Item in the list, it will ALWAYS inserting!
+func (l *IndexList[T, ID]) Insert(item T) int {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	idx := l.list.Add(item)
+	idx := l.list.Insert(item)
 	l.indexMap.Set(&item, idx)
 
 	return idx
+}
+
+// Update replaces an item and consistently updates all registered indexes.
+func (l *IndexList[T, ID]) Update(item T) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	id, idx, err := l.indexMap.getIDByItem(&item)
+	if err != nil {
+		return err
+	}
+
+	// overwrite the data in the main list
+	oldItem, ok := l.list.Set(idx, item)
+	if !ok {
+		return ErrValueNotFound{id}
+	}
+
+	// re-index
+	for _, index := range l.indexMap.index {
+		// TODO: do it better: check is it neccesary/dirty
+		index.UnSet(&oldItem, uint32(idx))
+		index.Set(&item, uint32(idx))
+	}
+
+	return nil
 }
 
 // Remove an item by the given ID.
@@ -62,7 +88,7 @@ func (l *IndexList[T]) Add(item T) int {
 // - wrong datatype
 // - ID not found
 // - no ID defined
-func (l *IndexList[T]) Remove(id any) (bool, error) {
+func (l *IndexList[T, ID]) Remove(id ID) (bool, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -81,7 +107,7 @@ func (l *IndexList[T]) Remove(id any) (bool, error) {
 // - wrong datatype
 // - ID not found
 // - no ID defined
-func (l *IndexList[T]) Get(id any) (T, error) {
+func (l *IndexList[T, ID]) Get(id ID) (T, error) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
@@ -97,7 +123,7 @@ func (l *IndexList[T]) Get(id any) (T, error) {
 }
 
 // ContainsID check, is this ID found in the list.
-func (l *IndexList[T]) ContainsID(id any) bool {
+func (l *IndexList[T, ID]) ContainsID(id ID) bool {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
@@ -106,20 +132,20 @@ func (l *IndexList[T]) ContainsID(id any) bool {
 }
 
 // Query execute the given Query.
-func (l *IndexList[T]) Query(query Query32) (QueryResult[T], error) {
+func (l *IndexList[T, ID]) Query(query Query32) (QueryResult[T, ID], error) {
 	l.lock.RLock()
 	bs, _, err := query(l.indexMap.LookupByName, l.indexMap.allIDs)
 	l.lock.RUnlock()
 
 	if err != nil {
-		return QueryResult[T]{}, err
+		return QueryResult[T, ID]{}, err
 	}
 
-	return QueryResult[T]{bitSet: bs, list: l}, nil
+	return QueryResult[T, ID]{bitSet: bs, list: l}, nil
 }
 
 // Count the Items, which in this list exist
-func (l *IndexList[T]) Count() int {
+func (l *IndexList[T, ID]) Count() int {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
@@ -127,7 +153,7 @@ func (l *IndexList[T]) Count() int {
 }
 
 //go:inline
-func (l *IndexList[T]) removeNoLock(index int) (t T, removed bool) {
+func (l *IndexList[T, ID]) removeNoLock(index int) (t T, removed bool) {
 	item, found := l.list.Get(index)
 	if !found {
 		return item, found
@@ -139,15 +165,15 @@ func (l *IndexList[T]) removeNoLock(index int) (t T, removed bool) {
 	return item, removed
 }
 
-type QueryResult[T any] struct {
+type QueryResult[T any, ID comparable] struct {
 	bitSet *BitSet[uint32]
-	list   *IndexList[T]
+	list   *IndexList[T, ID]
 }
 
-func (q *QueryResult[T]) Count() int  { return q.bitSet.Count() }
-func (q *QueryResult[T]) Empty() bool { return q.bitSet.Count() == 0 }
+func (q *QueryResult[T, ID]) Count() int  { return q.bitSet.Count() }
+func (q *QueryResult[T, ID]) Empty() bool { return q.bitSet.Count() == 0 }
 
-func (q *QueryResult[T]) Values() []T {
+func (q *QueryResult[T, ID]) Values() []T {
 	list := make([]T, 0, q.bitSet.Count())
 
 	q.list.lock.RLock()
@@ -164,13 +190,13 @@ func (q *QueryResult[T]) Values() []T {
 	return list
 }
 
-func (q *QueryResult[T]) Sort(less func(*T, *T) bool) []T {
+func (q *QueryResult[T, ID]) Sort(less func(*T, *T) bool) []T {
 	list := q.Values()
 	sort.Slice(list, func(i, j int) bool { return less(&list[i], &list[j]) })
 	return list
 }
 
-func (q *QueryResult[T]) Remove() {
+func (q *QueryResult[T, ID]) Remove() {
 	q.list.lock.Lock()
 	defer q.list.lock.Unlock()
 
