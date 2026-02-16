@@ -22,15 +22,18 @@ func (c *car) IsNew() bool  { return c.isNew }
 func TestIndexList_Base(t *testing.T) {
 	il := NewIndexList[car]()
 
-	il.CreateIndex("name", NewMapIndex((*car).Name))
-	il.CreateIndex("isnew", NewMapIndex((*car).IsNew))
+	err := il.CreateIndex("name", NewMapIndex((*car).Name))
+	assert.NoError(t, err)
+	err = il.CreateIndex("isnew", NewMapIndex((*car).IsNew))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Dacia", age: 22, color: "red"})
 	il.Insert(car{name: "Opel", age: 22})
 	il.Insert(car{name: "Mercedes", age: 5, isNew: true})
 	il.Insert(car{name: "Dacia", age: 22})
 
-	il.CreateIndex("age", NewMapIndex((*car).Age))
+	err = il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
 
 	c, found := il.list.Get(1)
 	assert.True(t, found)
@@ -85,14 +88,16 @@ func TestIndexList_CreateIndex_Err(t *testing.T) {
 func TestIndexList_Update(t *testing.T) {
 	il := NewIndexListWithID((*car).Name)
 
-	il.CreateIndex("isnew", NewMapIndex((*car).IsNew))
-	il.CreateIndex("age", NewMapIndex((*car).Age))
+	err := il.CreateIndex("isnew", NewMapIndex((*car).IsNew))
+	assert.NoError(t, err)
+	err = il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Opel", age: 22})
 	il.Insert(car{name: "Mercedes", age: 5, isNew: true})
 	il.Insert(car{name: "Dacia", age: 22})
 
-	err := il.Update(car{name: "Dacia", age: 25})
+	err = il.Update(car{name: "Dacia", age: 25})
 	assert.NoError(t, err)
 	// check the ID index
 	dacia, err := il.Get("Dacia")
@@ -112,7 +117,8 @@ func TestIndexList_QueryResult(t *testing.T) {
 	less := func(c1, c2 *car) bool { return strings.Compare(c1.name, c2.name) < 0 }
 
 	il := NewIndexList[car]()
-	il.CreateIndex("age", NewMapIndex((*car).Age))
+	err := il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Mercedes", age: 22, color: "red"})
 	il.Insert(car{name: "Opel", age: 22})
@@ -147,8 +153,10 @@ func TestIndexList_QueryResult(t *testing.T) {
 
 func TestIndexList_Remove(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex((*car).Name))
-	il.CreateIndex("age", NewMapIndex((*car).Age))
+	err := il.CreateIndex("name", NewMapIndex((*car).Name))
+	assert.NoError(t, err)
+	err = il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Mercedes", age: 22, color: "red"})
 	il.Insert(car{name: "Opel", age: 22})
@@ -195,8 +203,10 @@ func TestIndexList_Remove(t *testing.T) {
 
 func TestIndexList_RemoveLater(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex((*car).Name))
-	il.CreateIndex("age", NewMapIndex((*car).Age))
+	err := il.CreateIndex("name", NewMapIndex((*car).Name))
+	assert.NoError(t, err)
+	err = il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Mercedes", age: 22, color: "red"})
 	il.Insert(car{name: "Opel", age: 22})
@@ -226,8 +236,10 @@ func TestIndexList_RemoveLater(t *testing.T) {
 
 func TestIndexList_RemoveLaterAsync(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex((*car).Name))
-	il.CreateIndex("age", NewMapIndex((*car).Age))
+	err := il.CreateIndex("name", NewMapIndex((*car).Name))
+	assert.NoError(t, err)
+	err = il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Mercedes", age: 22, color: "red"})
 	il.Insert(car{name: "Opel", age: 22})
@@ -270,7 +282,8 @@ func TestIndexList_CreateIndex(t *testing.T) {
 	assert.Equal(t, "could not found index for field name: name", err.Error())
 
 	// create Index for name
-	il.CreateIndex("name", NewMapIndex((*car).Name))
+	err = il.CreateIndex("name", NewMapIndex((*car).Name))
+	assert.NoError(t, err)
 	qr, err := il.Query(Eq("name", "Opel"))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, qr.Count())
@@ -279,8 +292,10 @@ func TestIndexList_CreateIndex(t *testing.T) {
 
 func TestIndexList_CreateIndexVarious(t *testing.T) {
 	il := NewIndexList[car]()
-	il.CreateIndex("name", NewMapIndex((*car).Name))
-	il.CreateIndex("age", NewSortedIndex((*car).Age))
+	err := il.CreateIndex("name", NewMapIndex((*car).Name))
+	assert.NoError(t, err)
+	err = il.CreateIndex("age", NewSortedIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Dacia", age: 2, color: "red"})
 	il.Insert(car{name: "Opel", age: 12})
@@ -329,7 +344,8 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 
 func TestIndexList_StringItem(t *testing.T) {
 	il := NewIndexList[string]()
-	il.CreateIndex("val", NewMapIndex(SelfFn[string]()))
+	err := il.CreateIndex("val", NewMapIndex(SelfFn[string]()))
+	assert.NoError(t, err)
 
 	il.Insert("Dacia")
 	il.Insert("Opel")
@@ -344,7 +360,8 @@ func TestIndexList_StringItem(t *testing.T) {
 
 func TestIndexList_StringPtrItemWithNil(t *testing.T) {
 	il := NewIndexList[*string]()
-	il.CreateIndex("val", NewMapIndex(SelfFn[*string]()))
+	err := il.CreateIndex("val", NewMapIndex(SelfFn[*string]()))
+	assert.NoError(t, err)
 
 	dacia := "Dacia"
 	il.Insert(&dacia)
@@ -377,7 +394,8 @@ func TestIndexList_StringPtrItemWithNil(t *testing.T) {
 
 func TestIndexList_WithID(t *testing.T) {
 	il := NewIndexListWithID((*car).Name)
-	il.CreateIndex("isnew", NewMapIndex((*car).IsNew))
+	err := il.CreateIndex("isnew", NewMapIndex((*car).IsNew))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Opel", age: 22})
 	il.Insert(car{name: "Mercedes", age: 5, isNew: true})

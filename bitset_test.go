@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBitSetBase(t *testing.T) {
+func TestBitSet_Base(t *testing.T) {
 	b := NewBitSet[uint8]()
 	assert.False(t, b.Contains(0))
 
@@ -36,7 +36,7 @@ func TestBitSetBase(t *testing.T) {
 	_ = b.usedBytes()
 }
 
-func TestBitSetToBig(t *testing.T) {
+func TestBitSet_ToBig(t *testing.T) {
 	b := NewBitSet[uint32]()
 
 	assert.Equal(t, -1, b.MaxSetIndex())
@@ -45,7 +45,7 @@ func TestBitSetToBig(t *testing.T) {
 	assert.False(t, b.Contains(40_000))
 }
 
-func TestBitSetShrink(t *testing.T) {
+func TestBitSet_Shrink(t *testing.T) {
 	b := NewBitSet[uint16]()
 	b.Set(1)
 	b.Set(130)
@@ -62,7 +62,7 @@ func TestBitSetShrink(t *testing.T) {
 	assert.Equal(t, 0, b.MaxSetIndex())
 }
 
-func TestBitSetAnd(t *testing.T) {
+func TestBitSet_And(t *testing.T) {
 	b1 := NewBitSetFrom[uint32](1, 2, 110, 2345)
 	b2 := NewBitSetFrom[uint32](110)
 	result := b1.Copy()
@@ -84,7 +84,7 @@ func TestBitSetAnd(t *testing.T) {
 	assert.Equal(t, 0, b1.Count())
 }
 
-func TestBitSetOr(t *testing.T) {
+func TestBitSet_Or(t *testing.T) {
 	b1 := NewBitSetFrom[uint32](1, 2, 110, 2345)
 	b2 := NewBitSetFrom[uint32](110)
 	result := b1.Copy()
@@ -107,7 +107,7 @@ func TestBitSetOr(t *testing.T) {
 	assert.Equal(t, []uint32{110}, result.ToSlice())
 }
 
-func TestBitSetOr2(t *testing.T) {
+func TestBitSet_Or2(t *testing.T) {
 	b1 := NewBitSetFrom[uint32](1, 2, 3)
 	b2 := NewBitSetFrom[uint32](4, 5, 6)
 	result := b1.Copy()
@@ -121,7 +121,7 @@ func TestBitSetOr2(t *testing.T) {
 	assert.Equal(t, []uint32{1, 2, 3, 4, 5, 6}, result.ToSlice())
 }
 
-func TestBitSetXor(t *testing.T) {
+func TestBitSet_Xor(t *testing.T) {
 	b1 := NewBitSetFrom[uint32](1, 2, 110, 2345)
 	b2 := NewBitSetFrom[uint32](110)
 	result := b1.Copy()
@@ -154,7 +154,7 @@ func TestBitSetXor(t *testing.T) {
 	assert.Equal(t, []uint32{110}, result.ToSlice())
 }
 
-func TestBitSetAndNot(t *testing.T) {
+func TestBitSet_AndNot(t *testing.T) {
 	b1 := NewBitSetFrom[uint64](1, 2, 110, 2345)
 	b2 := NewBitSetFrom[uint64](110, 2)
 	result := b1.Copy()
@@ -177,7 +177,7 @@ func TestBitSetAndNot(t *testing.T) {
 	assert.Equal(t, []uint64{2, 110}, b1.ToSlice())
 }
 
-func TestBitSetMinMax(t *testing.T) {
+func TestBitSet_MinMax(t *testing.T) {
 	b := NewBitSet[uint8]()
 	b.Set(0)
 	b.Set(1)
@@ -199,7 +199,7 @@ func TestBitSetMinMax(t *testing.T) {
 	assert.Equal(t, 1, b.MaxSetIndex())
 }
 
-func TestBitSetValuesIter(t *testing.T) {
+func TestBitSet_ValuesIter(t *testing.T) {
 	b := NewBitSet[uint8]()
 	b.Set(2)
 	b.Set(1)
@@ -214,4 +214,91 @@ func TestBitSetValuesIter(t *testing.T) {
 	})
 
 	assert.Equal(t, []uint8{0, 1, 2, 142}, values)
+}
+
+func TestBitSet_Range(t *testing.T) {
+	type idxVal struct {
+		idx int
+		val uint32
+	}
+
+	tests := []struct {
+		name     string
+		bs       *BitSet[uint32]
+		from     uint32
+		to       uint32
+		expected []idxVal
+	}{
+		{
+			name:     "Middle of set",
+			bs:       NewBitSetFrom[uint32](1, 2, 8, 42),
+			from:     2,
+			to:       8,
+			expected: []idxVal{{idx: 1, val: 2}, {idx: 2, val: 8}},
+		},
+		{
+			name:     "Single bit range (Exact match)",
+			bs:       NewBitSetFrom[uint32](10, 20, 30),
+			from:     20,
+			to:       20,
+			expected: []idxVal{{idx: 1, val: 20}},
+		},
+		{
+			name:     "Empty Range (Nothing found)",
+			bs:       NewBitSetFrom[uint32](10, 20, 30),
+			from:     11,
+			to:       19,
+			expected: nil,
+		},
+		{
+			name: "Spanning Word Boundaries",
+			// Word 0: bit 63 | Word 1: bit 64, 65 | Word 2: bit 130
+			bs:       NewBitSetFrom[uint32](0, 63, 64, 65, 130),
+			from:     63,
+			to:       100,
+			expected: []idxVal{{idx: 1, val: 63}, {idx: 2, val: 64}, {idx: 3, val: 65}},
+		},
+		{
+			name:     "From > To (Invalid range)",
+			bs:       NewBitSetFrom[uint32](1, 2, 3),
+			from:     10,
+			to:       5,
+			expected: nil,
+		},
+		{
+			name:     "Full Set Range",
+			bs:       NewBitSetFrom[uint32](5, 10),
+			from:     0,
+			to:       100,
+			expected: []idxVal{{idx: 0, val: 5}, {idx: 1, val: 10}},
+		},
+		{
+			name:     "Boundary: Bit at 0",
+			bs:       NewBitSetFrom[uint32](0, 1, 2),
+			from:     0,
+			to:       0,
+			expected: []idxVal{{idx: 0, val: 0}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			var results []idxVal
+			tt.bs.range_(tt.from, tt.to, func(idx int, val uint32) bool {
+				results = append(results, idxVal{idx, val})
+				return true
+			})
+
+			if len(results) != len(tt.expected) {
+				t.Fatalf("expected %d results, got %d", len(tt.expected), len(results))
+			}
+
+			for i := range results {
+				if results[i] != tt.expected[i] {
+					t.Errorf("at result %d: expected %+v, got %+v", i, tt.expected[i], results[i])
+				}
+			}
+		})
+	}
 }
