@@ -46,6 +46,9 @@ func rel[LI Value](fieldName string, relation Relation, val any) Query[LI] {
 	}
 }
 
+// ID id = val
+func ID(val any) Query32 { return rel[uint32]("", Equal, val) }
+
 // Eq fieldName = val
 func Eq(fieldName string, val any) Query32 { return rel[uint32](fieldName, Equal, val) }
 

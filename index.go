@@ -21,9 +21,17 @@ func newIndexMap[OBJ any, ID comparable](idIndex idIndex[OBJ, ID]) indexMap[OBJ,
 
 // LookupByName finds the Lookup by a given field-name
 func (i indexMap[OBJ, ID]) LookupByName(fieldName string) (Lookup32, error) {
+	if fieldName == "" {
+		if i.idIndex == nil {
+			return nil, ErrNoIdIndexDefined{}
+		}
+		return i.idIndex, nil
+	}
+
 	if idx, found := i.index[fieldName]; found {
 		return idx, nil
 	}
+
 	return nil, ErrInvalidIndexdName{fieldName}
 }
 
@@ -56,7 +64,7 @@ func (i indexMap[OBJ, ID]) getIndexByID(id ID) (int, error) {
 		return 0, ErrNoIdIndexDefined{}
 	}
 
-	return i.idIndex.Get(id)
+	return i.idIndex.GetIndex(id)
 }
 
 func (i indexMap[OBJ, ID]) getIDByItem(item *OBJ) (ID, int, error) {
@@ -71,8 +79,9 @@ func (i indexMap[OBJ, ID]) getIDByItem(item *OBJ) (ID, int, error) {
 type idIndex[OBJ any, ID comparable] interface {
 	Set(*OBJ, int)
 	UnSet(*OBJ, int)
-	Get(ID) (int, error)
+	GetIndex(ID) (int, error)
 	GetID(*OBJ) (ID, int, error)
+	Lookup32
 }
 
 type idMapIndex[OBJ any, ID comparable] struct {
@@ -97,7 +106,7 @@ func (mi *idMapIndex[OBJ, ID]) UnSet(obj *OBJ, lidx int) {
 	delete(mi.data, id)
 }
 
-func (mi *idMapIndex[OBJ, ID]) Get(id ID) (int, error) {
+func (mi *idMapIndex[OBJ, ID]) GetIndex(id ID) (int, error) {
 	if lidx, found := mi.data[id]; found {
 		return lidx, nil
 	}
@@ -113,6 +122,24 @@ func (mi *idMapIndex[OBJ, ID]) GetID(item *OBJ) (ID, int, error) {
 
 	var null ID
 	return null, 0, ErrValueNotFound{id}
+}
+
+func (mi *idMapIndex[OBJ, ID]) Get(relation Relation, value any) (*BitSet[uint32], error) {
+	if _, ok := value.(ID); !ok {
+		return nil, ErrInvalidIndexValue[ID]{value}
+	}
+
+	if relation != Equal {
+		return nil, ErrInvalidRelation{relation}
+	}
+
+	idx, err := mi.GetIndex(value.(ID))
+	if err != nil {
+		return nil, err
+	}
+
+	return NewBitSetFrom(uint32(idx)), nil
+
 }
 
 // ------------------------------------------
@@ -137,6 +164,17 @@ type Lookup32 = Lookup[uint32]
 type Lookup[LI Value] interface {
 	Get(Relation, any) (*BitSet[LI], error)
 }
+
+// FieldGetFn is a function, which returns a value from an given object.
+// example:
+// Person{name string}
+// func (p *Person) Name() { return p.name }
+// (*Person).Name is the FieldGetFn
+type FieldGetFn[OBJ any, V any] = func(*OBJ) V
+
+// Self returns a Getter that simply returns the value itself.
+// Use this when your list contains the raw values you want to index.
+func SelfFn[T any]() FieldGetFn[T, T] { return func(v *T) T { return *v } }
 
 // MapIndex is a mapping of any value to the Index in the List.
 // This index only supported Queries with the Equal Ralation!

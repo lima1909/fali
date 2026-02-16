@@ -9,9 +9,6 @@ import (
 func set[T any](idx Index32[T], t T, r uint32)   { idx.Set(&t, r) }
 func unSet[T any](idx Index32[T], t T, r uint32) { idx.UnSet(&t, r) }
 
-func stringGetFn(t *string) string { return *t }
-func intGetFn(t *int) int          { return *t }
-
 func fieldIndexMapFn[T any](mi Index32[T]) LookupByName32 {
 	return func(fieldName string) (Lookup32, error) {
 		if fieldName == "val" {
@@ -23,7 +20,7 @@ func fieldIndexMapFn[T any](mi Index32[T]) LookupByName32 {
 }
 
 func TestMapIndex_UnSet(t *testing.T) {
-	mi := NewMapIndex(intGetFn)
+	mi := NewMapIndex(SelfFn[int]())
 	set(mi, 1, 1)
 	set(mi, 3, 3)
 	set(mi, 3, 5)
@@ -67,7 +64,7 @@ func TestMapIndex_UnSet(t *testing.T) {
 }
 
 func TestMapIndex_Get(t *testing.T) {
-	mi := NewMapIndex(intGetFn)
+	mi := NewMapIndex(SelfFn[int]())
 	set(mi, 1, 1)
 	set(mi, 3, 3)
 	set(mi, 3, 5)
@@ -87,7 +84,7 @@ func TestMapIndex_Get(t *testing.T) {
 }
 
 func TestMapIndex_Query(t *testing.T) {
-	mi := NewMapIndex(intGetFn)
+	mi := NewMapIndex(SelfFn[int]())
 	set(mi, 1, 1)
 	set(mi, 3, 3)
 	set(mi, 3, 5)
@@ -153,7 +150,7 @@ func TestMapIndex_Query(t *testing.T) {
 }
 
 func TestMapIndex_Query_Not(t *testing.T) {
-	mi := NewMapIndex(intGetFn)
+	mi := NewMapIndex(SelfFn[int]())
 	set(mi, 1, 1)
 	set(mi, 3, 3)
 	set(mi, 3, 5)
@@ -185,7 +182,7 @@ func TestMapIndex_Query_Not(t *testing.T) {
 }
 
 func TestMapIndex_Query_In(t *testing.T) {
-	mi := NewMapIndex(intGetFn)
+	mi := NewMapIndex(SelfFn[int]())
 	set(mi, 1, 1)
 	set(mi, 3, 3)
 	set(mi, 3, 5)
@@ -221,7 +218,7 @@ func TestMapIndex_Query_In(t *testing.T) {
 }
 
 func TestMapIndex_QueryAll(t *testing.T) {
-	mi := NewMapIndex(intGetFn)
+	mi := NewMapIndex(SelfFn[int]())
 	set(mi, 1, 1)
 	set(mi, 3, 3)
 	set(mi, 3, 5)

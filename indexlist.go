@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 )
@@ -33,15 +34,24 @@ func NewIndexListWithID[T any, ID comparable](fieldIDGetFn func(*T) ID) *IndexLi
 //   - fieldName: a name for a field of the saved Item
 //   - fieldGetFn: a function, which returns the value of an field
 //   - Index: a impl of the Index interface
-func (l *IndexList[T, ID]) CreateIndex(fieldName string, index Index32[T]) {
+func (l *IndexList[T, ID]) CreateIndex(fieldName string, index Index32[T]) error {
+	if fieldName == "" {
+		return fmt.Errorf("empty fieldName is not allowed")
+	}
+
 	l.lock.Lock()
 	defer l.lock.Unlock()
+
+	if _, exist := l.indexMap.index[fieldName]; exist {
+		return fmt.Errorf("field-name: %s already exists", fieldName)
+	}
 
 	for idx, item := range l.list.Iter() {
 		index.Set(&item, uint32(idx))
 	}
 
 	l.indexMap.index[fieldName] = index
+	return nil
 }
 
 // Insert add the given Item to the list,
