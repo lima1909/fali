@@ -14,6 +14,7 @@ type slot[T any] struct {
 type FreeList[T any] struct {
 	slots    []slot[T]
 	freeHead int // Index of the first free slot (-1 if none)
+	count    int
 }
 
 func NewFreeList[T any]() FreeList[T] {
@@ -25,6 +26,8 @@ func NewFreeList[T any]() FreeList[T] {
 
 // Insert an Item to the end of the List or use a free slot, to add this item
 func (l *FreeList[T]) Insert(item T) int {
+	l.count++
+
 	// no free slots in the list, append to the end
 	if l.freeHead == -1 {
 		idx := len(l.slots)
@@ -63,6 +66,7 @@ func (l *FreeList[T]) Remove(index int) bool {
 	l.slots[index].nextFree = l.freeHead
 	// make this slot the new head
 	l.freeHead = index
+	l.count--
 
 	return true
 }
@@ -96,6 +100,9 @@ func (l *FreeList[T]) Set(index int, newItem T) (T, bool) {
 	var null T
 	return null, false
 }
+
+// Count returns the count of the occupied slots
+func (l *FreeList[T]) Count() int { return l.count }
 
 // Iter create an Iterator, to iterate over all saved Indices and Items
 func (l *FreeList[T]) Iter() iter.Seq2[int, T] {

@@ -217,31 +217,34 @@ func TestBitSet_ValuesIter(t *testing.T) {
 }
 
 func TestBitSet_Range(t *testing.T) {
-	type idxVal struct {
-		idx int
-		val uint32
-	}
 
 	tests := []struct {
 		name     string
 		bs       *BitSet[uint32]
 		from     uint32
 		to       uint32
-		expected []idxVal
+		expected []uint32
 	}{
 		{
 			name:     "Middle of set",
 			bs:       NewBitSetFrom[uint32](1, 2, 8, 42),
 			from:     2,
 			to:       8,
-			expected: []idxVal{{idx: 1, val: 2}, {idx: 2, val: 8}},
+			expected: []uint32{2, 8},
+		},
+		{
+			name:     "Last value",
+			bs:       NewBitSetFrom[uint32](0, 1, 2),
+			from:     2,
+			to:       2,
+			expected: []uint32{2},
 		},
 		{
 			name:     "Single bit range (Exact match)",
 			bs:       NewBitSetFrom[uint32](10, 20, 30),
 			from:     20,
 			to:       20,
-			expected: []idxVal{{idx: 1, val: 20}},
+			expected: []uint32{20},
 		},
 		{
 			name:     "Empty Range (Nothing found)",
@@ -256,7 +259,7 @@ func TestBitSet_Range(t *testing.T) {
 			bs:       NewBitSetFrom[uint32](0, 63, 64, 65, 130),
 			from:     63,
 			to:       100,
-			expected: []idxVal{{idx: 1, val: 63}, {idx: 2, val: 64}, {idx: 3, val: 65}},
+			expected: []uint32{63, 64, 65},
 		},
 		{
 			name:     "From > To (Invalid range)",
@@ -270,23 +273,23 @@ func TestBitSet_Range(t *testing.T) {
 			bs:       NewBitSetFrom[uint32](5, 10),
 			from:     0,
 			to:       100,
-			expected: []idxVal{{idx: 0, val: 5}, {idx: 1, val: 10}},
+			expected: []uint32{5, 10},
 		},
 		{
 			name:     "Boundary: Bit at 0",
 			bs:       NewBitSetFrom[uint32](0, 1, 2),
 			from:     0,
 			to:       0,
-			expected: []idxVal{{idx: 0, val: 0}},
+			expected: []uint32{0},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			var results []idxVal
-			tt.bs.range_(tt.from, tt.to, func(idx int, val uint32) bool {
-				results = append(results, idxVal{idx, val})
+			var results []uint32
+			tt.bs.Range(tt.from, tt.to, func(val uint32) bool {
+				results = append(results, val)
 				return true
 			})
 

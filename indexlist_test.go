@@ -31,6 +31,7 @@ func TestIndexList_Base(t *testing.T) {
 	il.Insert(car{name: "Opel", age: 22})
 	il.Insert(car{name: "Mercedes", age: 5, isNew: true})
 	il.Insert(car{name: "Dacia", age: 22})
+	assert.Equal(t, 4, il.Count())
 
 	err = il.CreateIndex("age", NewMapIndex((*car).Age))
 	assert.NoError(t, err)
@@ -163,6 +164,7 @@ func TestIndexList_Remove(t *testing.T) {
 	il.Insert(car{name: "Dacia", age: 5, isNew: true})
 	il.Insert(car{name: "Dacia", age: 22})
 	il.Insert(car{name: "Audi", age: 22})
+	assert.Equal(t, 5, il.Count())
 
 	qr, err := il.Query(All())
 	assert.NoError(t, err)
@@ -193,7 +195,7 @@ func TestIndexList_Remove(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 3, qr.Count())
 
-	qr.Remove()
+	qr.RemoveAll()
 	assert.Equal(t, 1, il.Count())
 
 	c, found := il.list.Get(2)
@@ -213,6 +215,7 @@ func TestIndexList_RemoveLater(t *testing.T) {
 	il.Insert(car{name: "Dacia", age: 5, isNew: true})
 	il.Insert(car{name: "Dacia", age: 22})
 	il.Insert(car{name: "Audi", age: 22})
+	assert.Equal(t, 5, il.Count())
 
 	qr1, err := il.Query(Eq("name", "Dacia"))
 	assert.NoError(t, err)
@@ -222,16 +225,18 @@ func TestIndexList_RemoveLater(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, qr2.Count())
 
-	qr1.Remove()
+	qr1.RemoveAll()
 	assert.Equal(t, 0, qr1.Count())
 	assert.Equal(t, 0, qr2.Count())
+	assert.Equal(t, 3, il.Count())
 
 	_, err = il.Query(Eq("name", "Dacia"))
 	// Dacia doesn't exist anymore
 	assert.ErrorIs(t, ErrValueNotFound{"Dacia"}, err)
 
 	// qr1 has allready remove all Dacia
-	qr2.Remove()
+	qr2.RemoveAll()
+	assert.Equal(t, 3, il.Count())
 }
 
 func TestIndexList_RemoveLaterAsync(t *testing.T) {
@@ -246,6 +251,7 @@ func TestIndexList_RemoveLaterAsync(t *testing.T) {
 	il.Insert(car{name: "Dacia", age: 5, isNew: true})
 	il.Insert(car{name: "Dacia", age: 22})
 	il.Insert(car{name: "Audi", age: 22})
+	assert.Equal(t, 5, il.Count())
 
 	qr1, err := il.Query(Eq("name", "Dacia"))
 	assert.NoError(t, err)
@@ -258,16 +264,17 @@ func TestIndexList_RemoveLaterAsync(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		qr1.Remove()
+		qr1.RemoveAll()
 		assert.Equal(t, 0, qr1.Count())
 	})
 
 	wg.Go(func() {
-		qr2.Remove()
+		qr2.RemoveAll()
 		assert.Equal(t, 0, qr2.Count())
 	})
 
 	wg.Wait()
+	assert.Equal(t, 3, il.Count())
 }
 
 func TestIndexList_CreateIndex(t *testing.T) {
@@ -405,8 +412,8 @@ func TestIndexList_WithID(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, car{name: "Dacia", age: 42}, dacia)
 	assert.Equal(t, 3, il.Count())
-	assert.True(t, il.ContainsID("Dacia"))
-	assert.False(t, il.ContainsID("NotFound"))
+	assert.True(t, il.Contains("Dacia"))
+	assert.False(t, il.Contains("NotFound"))
 
 	// remove dacia
 	removed, err := il.Remove("Dacia")
@@ -454,4 +461,55 @@ func TestIndexList_QueryIDs(t *testing.T) {
 		{name: "Opel", age: 22},
 		{name: "Dacia", age: 22},
 	}, qr.Values())
+}
+
+func TestIndexList_Pagination(t *testing.T) {
+	il := NewIndexListWithID((*car).Name)
+
+	il.Insert(car{name: "Opel", age: 22})
+	il.Insert(car{name: "Mercedes", age: 5, isNew: true})
+	il.Insert(car{name: "Dacia", age: 22})
+
+	qr, err := il.Query(All())
+	assert.NoError(t, err)
+
+	result, pi := qr.Pagination(0, 1)
+	assert.Equal(t, PageInfo{Offset: 0, Limit: 1, Count: 1, Total: 3}, pi)
+	assert.Equal(t, []car{{name: "Opel", age: 22}}, result)
+
+	result, pi = qr.Pagination(1, 2)
+	assert.Equal(t, PageInfo{Offset: 1, Limit: 2, Count: 2, Total: 3}, pi)
+	assert.Equal(t, []car{
+		{name: "Mercedes", age: 5, isNew: true},
+		{name: "Dacia", age: 22},
+	}, result)
+
+	// offset = len(il)
+	result, pi = qr.Pagination(2, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, PageInfo{Offset: 2, Limit: 1, Count: 1, Total: 3}, pi)
+	assert.Equal(t, []car{{name: "Dacia", age: 22}}, result)
+
+	// limit > Total
+	result, pi = qr.Pagination(1, 5)
+	assert.Equal(t, PageInfo{Offset: 1, Limit: 5, Count: 2, Total: 3}, pi)
+	assert.Equal(t, []car{
+		{name: "Mercedes", age: 5, isNew: true},
+		{name: "Dacia", age: 22},
+	}, result)
+	// offset = len(il) is on the end
+	result, pi = qr.Pagination(2, 2)
+	assert.Equal(t, PageInfo{Offset: 2, Limit: 2, Count: 1, Total: 3}, pi)
+	assert.Equal(t, []car{{name: "Dacia", age: 22}}, result)
+
+	// count = 0
+	// offset > Total
+	result, pi = qr.Pagination(5, 1)
+	assert.Equal(t, PageInfo{Offset: 5, Limit: 1, Count: 0, Total: 3}, pi)
+	assert.Equal(t, []car{}, result)
+
+	// offset+limit > Total
+	result, pi = qr.Pagination(3, 1)
+	assert.Equal(t, PageInfo{Offset: 3, Limit: 1, Count: 0, Total: 3}, pi)
+	assert.Equal(t, []car{}, result)
 }

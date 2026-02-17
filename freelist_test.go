@@ -11,6 +11,7 @@ func TestFreeList_Base(t *testing.T) {
 	assert.Equal(t, 0, l.Insert("a"))
 	assert.Equal(t, 1, l.Insert("b"))
 	assert.Equal(t, 2, l.Insert("c"))
+	assert.Equal(t, 3, l.Count())
 
 	val, found := l.Get(1)
 	assert.True(t, found)
@@ -34,6 +35,7 @@ func TestFreeList_Update(t *testing.T) {
 	assert.Equal(t, 0, l.Insert("a"))
 	assert.Equal(t, 1, l.Insert("b"))
 	assert.Equal(t, 2, l.Insert("c"))
+	assert.Equal(t, 3, l.Count())
 
 	old, ok := l.Set(1, "z")
 	assert.True(t, ok)
@@ -48,8 +50,10 @@ func TestFreeList_Update(t *testing.T) {
 
 	// index not found
 	assert.True(t, l.Remove(1))
+	assert.Equal(t, 2, l.Count())
 	_, ok = l.Set(1, "z")
 	assert.False(t, ok)
+
 }
 
 func TestFreeList_CompactUnstable(t *testing.T) {
@@ -60,13 +64,16 @@ func TestFreeList_CompactUnstable(t *testing.T) {
 	l.Insert("d")
 	l.Insert("e")
 	l.Insert("f")
+	assert.Equal(t, 6, l.Count())
 
 	l.Remove(1) // b
 	l.Remove(2) // c
 	l.Remove(4) // e
+	assert.Equal(t, 3, l.Count())
 
 	l.CompactUnstable()
 	assert.Equal(t, 3, len(l.slots))
+	assert.Equal(t, 3, l.Count())
 
 	val, found := l.Get(0)
 	assert.True(t, found)
@@ -89,10 +96,12 @@ func TestFreeList_CompactLinear(t *testing.T) {
 	l.Insert("d")
 	l.Insert("e")
 	l.Insert("f")
+	assert.Equal(t, 6, l.Count())
 
 	l.Remove(1) // b
 	l.Remove(2) // c
 	l.Remove(4) // e
+	assert.Equal(t, 3, l.Count())
 
 	removed := make([]int, 0)
 	l.CompactLinear(func(oldIndex, newIndex int) {

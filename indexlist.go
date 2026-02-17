@@ -133,7 +133,7 @@ func (l *IndexList[T, ID]) Get(id ID) (T, error) {
 }
 
 // ContainsID check, is this ID found in the list.
-func (l *IndexList[T, ID]) ContainsID(id ID) bool {
+func (l *IndexList[T, ID]) Contains(id ID) bool {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
@@ -151,6 +151,10 @@ func (l *IndexList[T, ID]) Query(query Query32) (QueryResult[T, ID], error) {
 		return QueryResult[T, ID]{}, err
 	}
 
+	// if !canMutate {
+	// 	bs = bs.Copy()
+	// }
+
 	return QueryResult[T, ID]{bitSet: bs, list: l}, nil
 }
 
@@ -159,7 +163,7 @@ func (l *IndexList[T, ID]) Count() int {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	return l.indexMap.allIDs.Count()
+	return l.list.Count()
 }
 
 //go:inline
@@ -206,7 +210,7 @@ func (q *QueryResult[T, ID]) Sort(less func(*T, *T) bool) []T {
 	return list
 }
 
-func (q *QueryResult[T, ID]) Remove() {
+func (q *QueryResult[T, ID]) RemoveAll() {
 	q.list.lock.Lock()
 	defer q.list.lock.Unlock()
 
@@ -214,4 +218,41 @@ func (q *QueryResult[T, ID]) Remove() {
 		q.list.removeNoLock(int(r))
 		return true
 	})
+}
+
+type PageInfo struct {
+	Offset uint32
+	Limit  uint32
+	Count  int
+	Total  int
+}
+
+func (q *QueryResult[T, ID]) Pagination(offset, limit uint32) ([]T, PageInfo) {
+	pi := PageInfo{Offset: offset, Limit: limit, Total: q.list.Count()}
+
+	if offset > uint32(pi.Total) {
+		return []T{}, pi
+	}
+
+	capacity := limit
+	if offset+limit > uint32(pi.Total) {
+		capacity = uint32(pi.Total) - offset
+	}
+	list := make([]T, 0, capacity)
+
+	q.list.lock.RLock()
+	defer q.list.lock.RUnlock()
+
+	q.bitSet.Range(offset, offset+limit, func(idx uint32) bool {
+		if idx == offset+limit {
+			return false
+		}
+
+		val, _ := q.list.list.Get(int(idx))
+		list = append(list, val)
+		return true
+	})
+
+	pi.Count = len(list)
+	return list, pi
 }

@@ -86,32 +86,22 @@ func (b *BitSet[V]) Contains(value V) bool {
 	return (b.data[index] & (1 << (value & 63))) != 0
 }
 
-// Range iterates between [from, to] (inclusive from and to).
-// It returns early if visit returns false.
-func (b *BitSet[V]) range_(from, to V, visit func(idx int, val V) bool) {
-	start, end := uint64(from), uint64(to)
-	if start > end || len(b.data) == 0 {
+// Range iterates over set bits between 'from' and 'to' (inclusive).
+// It calls 'visit' for each found bit. If 'visit' returns false, iteration stops.
+func (b *BitSet[V]) Range(from, to V, visit func(v uint32) bool) {
+	if from > to || len(b.data) == 0 {
 		return
 	}
 
-	startWord := int(start >> 6)
-	endWord := int(end >> 6)
+	startWord := int(from >> 6)
+	endWord := int(to >> 6)
 
+	// bounds check
 	if startWord >= len(b.data) {
 		return
 	}
 	if endWord >= len(b.data) {
 		endWord = len(b.data) - 1
-	}
-
-	idx := 0
-	for i := range startWord {
-		idx += bits.OnesCount64(b.data[i])
-	}
-
-	beforeMask := ^uint64(0) >> (64 - (start & 63))
-	if (start & 63) != 0 {
-		idx += bits.OnesCount64(b.data[startWord] & beforeMask)
 	}
 
 	for i := startWord; i <= endWord; i++ {
@@ -120,39 +110,23 @@ func (b *BitSet[V]) range_(from, to V, visit func(idx int, val V) bool) {
 			continue
 		}
 
-		// Apply range masks
 		if i == startWord {
-			w &= (^uint64(0) << (start & 63))
+			w &= (^uint64(0) << (from & 63))
 		}
 		if i == endWord {
-			w &= (^uint64(0) >> (63 - (end & 63)))
+			w &= (^uint64(0) >> (63 - (to & 63)))
 		}
 
-		if w != 0 {
-			base := uint64(i) << 6
-			for w != 0 {
-				t := uint64(bits.TrailingZeros64(w))
+		for w != 0 {
+			t := bits.TrailingZeros64(w)
+			val := uint32(i<<6) + uint32(t)
 
-				if !visit(idx, V(base+t)) {
-					return
-				}
-
-				idx++
-				w &= w - 1
+			if !visit(val) {
+				return
 			}
-		} else if i > startWord {
-			// Even if the masked word is 0, we must count the
-			// original bits if we are between start and end words
-			// but the masking logic above already handles this via absIdx++
-		}
 
-		// If we finish a word and move to the next,
-		// we need to make sure absIdx accounts for any bits
-		// skipped if the loop 'continued' early.
-		// BUT: The most efficient way is to only increment absIdx
-		// inside the 'w != 0' block as we find them.
-		// However, we must "catch up" the counter for full words
-		// that were skipped or partially processed.
+			w &= w - 1
+		}
 	}
 }
 
