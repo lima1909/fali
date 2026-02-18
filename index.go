@@ -2,6 +2,8 @@ package main
 
 import (
 	"cmp"
+	"fmt"
+	"reflect"
 )
 
 // fieldIndexMap maps a given field name to an Index
@@ -86,10 +88,10 @@ type idIndex[OBJ any, ID comparable] interface {
 
 type idMapIndex[OBJ any, ID comparable] struct {
 	data       map[ID]int
-	fieldGetFn func(*OBJ) ID
+	fieldGetFn FromField[OBJ, ID]
 }
 
-func newIDMapIndex[OBJ any, ID comparable](fieldGetFn func(*OBJ) ID) idIndex[OBJ, ID] {
+func newIDMapIndex[OBJ any, ID comparable](fieldGetFn FromField[OBJ, ID]) idIndex[OBJ, ID] {
 	return &idMapIndex[OBJ, ID]{
 		data:       make(map[ID]int),
 		fieldGetFn: fieldGetFn,
@@ -165,28 +167,57 @@ type Lookup[LI Value] interface {
 	Get(Relation, any) (*BitSet[LI], error)
 }
 
-// FieldGetFn is a function, which returns a value from an given object.
+// FromField is a function, which returns a value from an given object.
 // example:
 // Person{name string}
 // func (p *Person) Name() { return p.name }
 // (*Person).Name is the FieldGetFn
-type FieldGetFn[OBJ any, V any] = func(*OBJ) V
+type FromField[OBJ any, V any] = func(*OBJ) V
 
-// Self returns a Getter that simply returns the value itself.
+// FromValue returns a Getter that simply returns the value itself.
 // Use this when your list contains the raw values you want to index.
-func SelfFn[T any]() FieldGetFn[T, T] { return func(v *T) T { return *v } }
+func FromValue[V any]() FromField[V, V] { return func(v *V) V { return *v } }
+
+// FromName returns per reflection the propery (field) value from the given object.
+func FromName[OBJ any, V any](fieldName string) FromField[OBJ, V] {
+	return func(obj *OBJ) V {
+		v := reflect.ValueOf(obj)
+
+		// if it's a pointer, get the underlying element
+		if v.Kind() == reflect.Pointer {
+			v = v.Elem()
+		}
+
+		if v.Kind() != reflect.Struct {
+			panic(fmt.Sprintf("expected struct, got %s", v.Kind()))
+		}
+
+		field := v.FieldByName(fieldName)
+
+		if !field.IsValid() {
+			panic(fmt.Sprintf("field %s not found", fieldName))
+		}
+
+		// reflection cannot access lowercase (unexported) fields via .Interface()
+		if !field.CanInterface() {
+			panic(fmt.Sprintf("field %s is unexported", fieldName))
+		}
+
+		return field.Interface().(V)
+	}
+}
 
 // MapIndex is a mapping of any value to the Index in the List.
 // This index only supported Queries with the Equal Ralation!
 type MapIndex[OBJ any, V any, LI Value] struct {
 	data       map[any]*BitSet[LI]
-	fieldGetFn func(*OBJ) V
+	fieldGetFn FromField[OBJ, V]
 }
 
-func NewMapIndex[OBJ any, V any](fieldGetFn func(*OBJ) V) Index32[OBJ] {
+func NewMapIndex[OBJ any, V any](fromField FromField[OBJ, V]) Index32[OBJ] {
 	return &MapIndex[OBJ, V, uint32]{
 		data:       make(map[any]*BitSet[uint32]),
-		fieldGetFn: fieldGetFn,
+		fieldGetFn: fromField,
 	}
 }
 
@@ -230,10 +261,10 @@ func (mi *MapIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI], 
 // SortedIndex is well suited for Queries with: Range, Min, Max, Greater and Less
 type SortedIndex[OBJ any, V cmp.Ordered, LI Value] struct {
 	skipList   SkipList[V, *BitSet[LI]]
-	fieldGetFn func(*OBJ) V
+	fieldGetFn FromField[OBJ, V]
 }
 
-func NewSortedIndex[OBJ any, V cmp.Ordered](fieldGetFn func(*OBJ) V) Index32[OBJ] {
+func NewSortedIndex[OBJ any, V cmp.Ordered](fieldGetFn FromField[OBJ, V]) Index32[OBJ] {
 	return &SortedIndex[OBJ, V, uint32]{
 		skipList:   NewSkipList[V, *BitSet[uint32]](),
 		fieldGetFn: fieldGetFn,

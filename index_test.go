@@ -7,7 +7,7 @@ import (
 )
 
 func TestSortedIndex_Equal(t *testing.T) {
-	si := NewSortedIndex(SelfFn[string]())
+	si := NewSortedIndex(FromValue[string]())
 	set(si, "a", 1)
 	set(si, "a", 2)
 	set(si, "b", 3)
@@ -25,7 +25,7 @@ func TestSortedIndex_Equal(t *testing.T) {
 }
 
 func TestSortedIndex_Less(t *testing.T) {
-	si := NewSortedIndex(SelfFn[int]())
+	si := NewSortedIndex(FromValue[int]())
 	set(si, 1, 1)
 	set(si, 1, 2)
 	set(si, 3, 3)
@@ -43,7 +43,7 @@ func TestSortedIndex_Less(t *testing.T) {
 }
 
 func TestSortedIndex_LessEqual(t *testing.T) {
-	si := NewSortedIndex(SelfFn[int]())
+	si := NewSortedIndex(FromValue[int]())
 	set(si, 1, 1)
 	set(si, 1, 2)
 	set(si, 3, 3)

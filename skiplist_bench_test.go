@@ -68,3 +68,25 @@ func BenchmarkRange(b *testing.B) {
 		result = result[:0]
 	}
 }
+
+type Person struct{ Name string }
+
+func (p *Person) GetName() string { return p.Name }
+
+func BenchmarkFromField(b *testing.B) {
+	p := Person{"ItsMe"}
+	fromField := ((*Person).GetName)
+
+	for b.Loop() {
+		assert.Equal(b, "ItsMe", fromField(&p))
+	}
+}
+
+func BenchmarkFromName(b *testing.B) {
+	p := Person{"ItsMe"}
+	fieldName := FromName[Person, string]("Name")
+
+	for b.Loop() {
+		assert.Equal(b, "ItsMe", fieldName(&p))
+	}
+}

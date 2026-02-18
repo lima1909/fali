@@ -351,7 +351,7 @@ func TestIndexList_CreateIndexVarious(t *testing.T) {
 
 func TestIndexList_StringItem(t *testing.T) {
 	il := NewIndexList[string]()
-	err := il.CreateIndex("val", NewMapIndex(SelfFn[string]()))
+	err := il.CreateIndex("val", NewMapIndex(FromValue[string]()))
 	assert.NoError(t, err)
 
 	il.Insert("Dacia")
@@ -367,7 +367,7 @@ func TestIndexList_StringItem(t *testing.T) {
 
 func TestIndexList_StringPtrItemWithNil(t *testing.T) {
 	il := NewIndexList[*string]()
-	err := il.CreateIndex("val", NewMapIndex(SelfFn[*string]()))
+	err := il.CreateIndex("val", NewMapIndex(FromValue[*string]()))
 	assert.NoError(t, err)
 
 	dacia := "Dacia"
