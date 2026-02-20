@@ -42,6 +42,7 @@ func (ti *TrigramIndex) Get(query string) *BitSet[uint32] {
 	}
 
 	// generate trigrams for the query
+	first := true
 	for i := 0; i < len(query)-2; i++ {
 		tri := pack(query[i], query[i+1], query[i+2])
 		bs, ok := ti.index[tri]
@@ -49,8 +50,12 @@ func (ti *TrigramIndex) Get(query string) *BitSet[uint32] {
 			// If any trigram doesn't exist, the whole substring can't exist
 			return NewBitSet[uint32]()
 		}
-		resultBS.Or(&bs)
-
+		if first {
+			resultBS.Or(&bs) // seed with first trigram's candidates
+			first = false
+		} else {
+			resultBS.And(&bs) // intersect to narrow down
+		}
 	}
 
 	// verification (False Positive Check)

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 // fieldIndexMap maps a given field name to an Index
@@ -180,30 +181,50 @@ func FromValue[V any]() FromField[V, V] { return func(v *V) V { return *v } }
 
 // FromName returns per reflection the propery (field) value from the given object.
 func FromName[OBJ any, V any](fieldName string) FromField[OBJ, V] {
+	var zero OBJ
+	typ := reflect.TypeOf(zero)
+	isPtr := false
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+		isPtr = true
+	}
+
+	if typ.Kind() != reflect.Struct {
+		panic(fmt.Sprintf("expected struct, got %s", typ.Kind()))
+	}
+
+	field, ok := typ.FieldByName(fieldName)
+	if !ok {
+		panic(fmt.Sprintf("field %s not found", fieldName))
+	}
+	// reflection cannot access lowercase (unexported) fields via .Interface()
+	// unless we use unsafe, but let's stick to standard safety checks at setup time.
+	// Actually, unsafe access works on unexported fields too, but usually discouraged.
+	// But let's fail as per original behavior.
+	if !field.IsExported() {
+		panic(fmt.Sprintf("field %s is unexported", fieldName))
+	}
+
+	offset := field.Offset
+
+	if isPtr {
+		// OBJ is *Struct. input is **Struct.
+		return func(obj *OBJ) V {
+			// *obj is the *Struct.
+			// We need unsafe.Pointer(*obj) + offset
+			structPtr := *(**unsafe.Pointer)(unsafe.Pointer(obj))
+			if structPtr == nil {
+				var zero V
+				return zero // Or panic? Original reflect would panic on nil pointer deref usually.
+			}
+			return *(*V)(unsafe.Pointer(uintptr(*structPtr) + offset))
+		}
+	}
+
+	// OBJ is Struct. input is *Struct.
 	return func(obj *OBJ) V {
-		v := reflect.ValueOf(obj)
-
-		// if it's a pointer, get the underlying element
-		if v.Kind() == reflect.Pointer {
-			v = v.Elem()
-		}
-
-		if v.Kind() != reflect.Struct {
-			panic(fmt.Sprintf("expected struct, got %s", v.Kind()))
-		}
-
-		field := v.FieldByName(fieldName)
-
-		if !field.IsValid() {
-			panic(fmt.Sprintf("field %s not found", fieldName))
-		}
-
-		// reflection cannot access lowercase (unexported) fields via .Interface()
-		if !field.CanInterface() {
-			panic(fmt.Sprintf("field %s is unexported", fieldName))
-		}
-
-		return field.Interface().(V)
+		// obj is *Struct
+		return *(*V)(unsafe.Pointer(uintptr(unsafe.Pointer(obj)) + offset))
 	}
 }
 
