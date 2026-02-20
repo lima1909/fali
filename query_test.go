@@ -230,3 +230,34 @@ func TestMapIndex_QueryAll(t *testing.T) {
 	assert.False(t, canMutate)
 	assert.Equal(t, []uint32{1, 3, 5, 42}, result.ToSlice())
 }
+
+func TestSortedIndex_StringStartsWith(t *testing.T) {
+	mi := NewSortedIndex(FromValue[string]())
+	set(mi, "app", 1)
+	set(mi, "no", 3)
+	set(mi, "appl", 5)
+	set(mi, "appx", 42)
+
+	fi := fieldIndexMapFn(mi)
+	allIDs := NewBitSetFrom[uint32](1, 3, 5, 42)
+
+	result, canMutate, err := WithPrefix("val", "not found")(fi, allIDs)
+	assert.NoError(t, err)
+	assert.False(t, canMutate)
+	assert.Equal(t, []uint32{}, result.ToSlice())
+
+	result, canMutate, err = WithPrefix("val", "")(fi, allIDs)
+	assert.NoError(t, err)
+	assert.False(t, canMutate)
+	assert.Equal(t, []uint32{1, 3, 5, 42}, result.ToSlice())
+
+	result, canMutate, err = WithPrefix("val", "no")(fi, allIDs)
+	assert.NoError(t, err)
+	assert.False(t, canMutate)
+	assert.Equal(t, []uint32{3}, result.ToSlice())
+
+	result, canMutate, err = WithPrefix("val", "app")(fi, allIDs)
+	assert.NoError(t, err)
+	assert.False(t, canMutate)
+	assert.Equal(t, []uint32{1, 5, 42}, result.ToSlice())
+}

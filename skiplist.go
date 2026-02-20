@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -248,6 +249,21 @@ func (sl *SkipList[K, V]) Greater(key K, visit VisitFn[K, V]) {
 func (sl *SkipList[K, V]) GreaterEqual(key K, visit VisitFn[K, V]) {
 	if maxKey, found := sl.MaxKey(); found {
 		sl.Range(key, maxKey, func(k K, v V) bool {
+			return visit(k, v)
+		})
+	}
+}
+
+// StringStartsWith finds all keys with the given prefix.
+// If prefix (K) is not a string, this method panics!
+func (sl *SkipList[K, V]) StringStartsWith(prefix K, visit VisitFn[K, V]) {
+	if maxString, found := sl.MaxKey(); found {
+		prefixStr := any(prefix).(string)
+		sl.Range(prefix, maxString, func(k K, v V) bool {
+			if !strings.HasPrefix(any(k).(string), prefixStr) {
+				return false
+			}
+
 			return visit(k, v)
 		})
 	}

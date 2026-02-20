@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -336,23 +335,17 @@ func TestSplitList_GreaterEqual(t *testing.T) {
 	assert.Equal(t, []int{}, result)
 }
 
-func TestSplitList_Prefix(t *testing.T) {
+func TestSplitList_StringStartsWith(t *testing.T) {
 	sl := NewSkipList[string, int]()
 	assert.True(t, sl.Put("abc", 1))
 	assert.True(t, sl.Put("bca", 2))
 	assert.True(t, sl.Put("bcx", 3))
 	assert.True(t, sl.Put("ba", 4))
 
-	prefix := "bc"
 	var result []int
-	sl.GreaterEqual(prefix, func(k string, v int) bool {
-		if strings.HasPrefix(k, prefix) {
-			result = append(result, v)
-			return true
-		}
-
-		return false
-
+	sl.StringStartsWith("bc", func(k string, v int) bool {
+		result = append(result, v)
+		return true
 	})
 
 	assert.Equal(t, []int{2, 3}, result)

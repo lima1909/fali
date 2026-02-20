@@ -8,6 +8,7 @@ const (
 	LessEqual
 	Greater
 	GreaterEqual
+	StartsWith // only works with string in the moment
 )
 
 // Query32 supports only uint32 List-Indices
@@ -144,6 +145,9 @@ func Not[LI Value](q Query[LI]) Query[LI] {
 		return result, true, nil
 	}
 }
+
+// Eq fieldName = val
+func WithPrefix(fieldName string, val string) Query32 { return rel[uint32](fieldName, StartsWith, val) }
 
 // And combines 2 or more queries with an logical And
 func And[LI Value](a Query[LI], b Query[LI], other ...Query[LI]) Query[LI] {

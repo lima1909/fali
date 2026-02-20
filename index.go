@@ -217,14 +217,14 @@ func FromName[OBJ any, V any](fieldName string) FromField[OBJ, V] {
 				var zero V
 				return zero // Or panic? Original reflect would panic on nil pointer deref usually.
 			}
-			return *(*V)(unsafe.Pointer(uintptr(*structPtr) + offset))
+			return *(*V)(unsafe.Add(*structPtr, offset))
 		}
 	}
 
 	// OBJ is Struct. input is *Struct.
 	return func(obj *OBJ) V {
 		// obj is *Struct
-		return *(*V)(unsafe.Pointer(uintptr(unsafe.Pointer(obj)) + offset))
+		return *(*V)(unsafe.Add(unsafe.Pointer(obj), offset))
 	}
 }
 
@@ -347,6 +347,17 @@ func (si *SortedIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI
 	case GreaterEqual:
 		result := NewBitSet[LI]()
 		si.skipList.GreaterEqual(value.(V), func(_ V, bs *BitSet[LI]) bool {
+			result.Or(bs)
+			return true
+		})
+		return result, nil
+	case StartsWith:
+		if _, ok := value.(string); !ok {
+			return nil, ErrInvalidIndexValue[string]{value}
+		}
+
+		result := NewBitSet[LI]()
+		si.skipList.StringStartsWith(value.(V), func(_ V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})

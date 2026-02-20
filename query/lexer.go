@@ -1,6 +1,6 @@
 package query
 
-type tokenType int
+type tokenType uint8
 
 const (
 	tokEOF tokenType = iota
@@ -15,8 +15,9 @@ const (
 )
 
 type token struct {
-	Type tokenType
-	Lit  string
+	Start int
+	End   int
+	Type  tokenType
 }
 
 type lexer struct {
@@ -36,21 +37,24 @@ func (l *lexer) nextToken() token {
 	}
 
 	if l.pos >= len(l.input) {
-		return token{tokEOF, ""}
+		return token{Type: tokEOF, Start: l.pos, End: l.pos}
 	}
 
 	ch := l.input[l.pos]
 
 	switch {
 	case ch == '(':
+		start := l.pos
 		l.pos++
-		return token{tokLParen, ""} // No need to store literal "("
+		return token{Type: tokLParen, Start: start, End: l.pos}
 	case ch == ')':
+		start := l.pos
 		l.pos++
-		return token{tokRParen, ""}
+		return token{Type: tokRParen, Start: start, End: l.pos}
 	case ch == '=':
+		start := l.pos
 		l.pos++
-		return token{tokEq, ""}
+		return token{Type: tokEq, Start: start, End: l.pos}
 	case ch == '"', ch == '\'':
 		return l.readString(ch)
 	case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_':
@@ -60,7 +64,7 @@ func (l *lexer) nextToken() token {
 	}
 
 	l.pos++
-	return token{tokEOF, ""}
+	return token{Type: tokEOF, Start: l.pos, End: l.pos}
 }
 
 // readIdentOrKeyword checks if the word is AND / OR without allocating memory
@@ -75,17 +79,22 @@ func (l *lexer) readIdentOrKeyword() token {
 		}
 	}
 
-	lit := l.input[start:l.pos]
-
+	length := l.pos - start
 	// Zero-allocation keyword check
-	if len(lit) == 3 && (lit[0] == 'a' || lit[0] == 'A') && (lit[1] == 'n' || lit[1] == 'N') && (lit[2] == 'd' || lit[2] == 'D') {
-		return token{tokAnd, ""}
+	if length == 3 {
+		b := l.input[start:]
+		if (b[0] == 'a' || b[0] == 'A') && (b[1] == 'n' || b[1] == 'N') && (b[2] == 'd' || b[2] == 'D') {
+			return token{Type: tokAnd, Start: start, End: l.pos}
+		}
 	}
-	if len(lit) == 2 && (lit[0] == 'o' || lit[0] == 'O') && (lit[1] == 'r' || lit[1] == 'R') {
-		return token{tokOr, ""}
+	if length == 2 {
+		b := l.input[start:]
+		if (b[0] == 'o' || b[0] == 'O') && (b[1] == 'r' || b[1] == 'R') {
+			return token{Type: tokOr, Start: start, End: l.pos}
+		}
 	}
 
-	return token{tokIdent, lit}
+	return token{Type: tokIdent, Start: start, End: l.pos}
 }
 
 func (l *lexer) readNumber() token {
@@ -98,7 +107,7 @@ func (l *lexer) readNumber() token {
 			break
 		}
 	}
-	return token{tokNumber, l.input[start:l.pos]}
+	return token{Type: tokNumber, Start: start, End: l.pos}
 }
 
 func (l *lexer) readString(quote byte) token {
@@ -107,7 +116,9 @@ func (l *lexer) readString(quote byte) token {
 	for l.pos < len(l.input) && l.input[l.pos] != quote {
 		l.pos++
 	}
-	lit := l.input[start:l.pos]
-	l.pos++ // Skip close quote
-	return token{tokString, lit}
+	end := l.pos
+	if l.pos < len(l.input) {
+		l.pos++ // Skip close quote
+	}
+	return token{Type: tokString, Start: start, End: end}
 }
