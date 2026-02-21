@@ -192,6 +192,9 @@ func (b *BitSet[V]) Count() int {
 	return count
 }
 
+// IsEmpty there are no bits set, means Count() == 0
+func (b *BitSet[V]) IsEmpty() bool { return b.Count() == 0 }
+
 // Len returns the len of the bit slice
 func (b *BitSet[V]) Len() int { return len(b.data) }
 

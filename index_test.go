@@ -20,8 +20,9 @@ func TestSortedIndex_Equal(t *testing.T) {
 	assert.Equal(t, []uint32{1}, bs.ToSlice())
 
 	unSet(si, "a", 1)
-	_, err := si.Get(Equal, "a")
-	assert.ErrorIs(t, ErrValueNotFound{"a"}, err)
+	bs, err := si.Get(Equal, "a")
+	assert.NoError(t, err)
+	assert.Equal(t, 0, bs.Count())
 }
 
 func TestSortedIndex_Less(t *testing.T) {

@@ -184,8 +184,8 @@ type QueryResult[T any, ID comparable] struct {
 	list   *IndexList[T, ID]
 }
 
-func (q *QueryResult[T, ID]) Count() int  { return q.bitSet.Count() }
-func (q *QueryResult[T, ID]) Empty() bool { return q.bitSet.Count() == 0 }
+func (q *QueryResult[T, ID]) Count() int    { return q.bitSet.Count() }
+func (q *QueryResult[T, ID]) IsEmpty() bool { return q.bitSet.IsEmpty() }
 
 func (q *QueryResult[T, ID]) Values() []T {
 	list := make([]T, 0, q.bitSet.Count())

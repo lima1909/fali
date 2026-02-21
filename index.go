@@ -273,7 +273,7 @@ func (mi *MapIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI], 
 
 	bs, found := mi.data[value]
 	if !found {
-		return nil, ErrValueNotFound{value}
+		return NewBitSet[LI](), nil
 	}
 
 	return bs, nil
@@ -322,7 +322,7 @@ func (si *SortedIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI
 		if bs, found := si.skipList.Get(value.(V)); found {
 			return bs, nil
 		}
-		return nil, ErrValueNotFound{value}
+		return NewBitSet[LI](), nil
 	case Less:
 		result := NewBitSet[LI]()
 		si.skipList.Less(value.(V), func(v V, bs *BitSet[LI]) bool {

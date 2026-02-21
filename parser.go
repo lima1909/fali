@@ -1,59 +1,9 @@
-package query
+package main
 
 import (
 	"fmt"
 	"strconv"
 )
-
-type Getter func(field string) any
-
-type Filter interface {
-	Match(get Getter) bool
-}
-
-type Eq struct {
-	Field string
-	Value any
-}
-
-func (e *Eq) Match(get Getter) bool { return get(e.Field) == e.Value }
-
-type Neq struct {
-	Field string
-	Value any
-}
-
-func (n *Neq) Match(get Getter) bool {
-	return get(n.Field) != n.Value
-}
-
-type And struct {
-	Left  Filter
-	Right Filter
-}
-
-func (a *And) Match(get Getter) bool { return a.Left.Match(get) && a.Right.Match(get) }
-
-type Or struct {
-	Left  Filter
-	Right Filter
-}
-
-func (o *Or) Match(get Getter) bool { return o.Left.Match(get) || o.Right.Match(get) }
-
-type Not struct {
-	Expr Filter
-}
-
-func (n *Not) Match(get Getter) bool {
-	return !n.Expr.Match(get)
-}
-
-type parser struct {
-	input string
-	lex   lexer
-	cur   token
-}
 
 type ErrUnexpectedToken struct {
 	token    token
@@ -78,7 +28,13 @@ func (e ErrUnexpectedToken) Error() string {
 	)
 }
 
-func Parse(input string) (Filter, error) {
+type parser struct {
+	input string
+	lex   lexer
+	cur   token
+}
+
+func Parse(input string) (Query32, error) {
 	p := parser{input: input, lex: lexer{input: input, pos: 0}}
 	p.next()
 	ast, err := p.parseOr()
@@ -94,7 +50,8 @@ func Parse(input string) (Filter, error) {
 //go:inline
 func (p *parser) next() { p.cur = p.lex.nextToken() }
 
-func (p *parser) parseOr() (Filter, error) {
+func (p *parser) parseOr() (Query32, error) {
+	// the rule: AND before OR
 	left, err := p.parseAnd()
 	if err != nil {
 		return nil, err
@@ -106,12 +63,12 @@ func (p *parser) parseOr() (Filter, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &Or{Left: left, Right: right}
+		left = Or(left, right)
 	}
 	return left, nil
 }
 
-func (p *parser) parseAnd() (Filter, error) {
+func (p *parser) parseAnd() (Query32, error) {
 	left, err := p.parseCondition()
 	if err != nil {
 		return nil, err
@@ -123,12 +80,12 @@ func (p *parser) parseAnd() (Filter, error) {
 		if err != nil {
 			return nil, err
 		}
-		left = &And{Left: left, Right: right}
+		left = And(left, right)
 	}
 	return left, nil
 }
 
-func (p *parser) parseCondition() (Filter, error) {
+func (p *parser) parseCondition() (Query32, error) {
 	if p.cur.Type == tokNot {
 		p.next() // consume 'NOT'
 		// Recursively parse the expression that follows
@@ -136,7 +93,7 @@ func (p *parser) parseCondition() (Filter, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Not{Expr: expr}, nil
+		return Not(expr), nil
 	}
 
 	if p.cur.Type == tokLParen {
@@ -191,10 +148,10 @@ func (p *parser) parseCondition() (Filter, error) {
 
 	switch relTokenType {
 	case tokNeq:
-		return &Neq{Field: field, Value: val}, nil
+		return NotEq(field, val), nil
 	default:
 		// must be Eq, the evaluation was already
-		return &Eq{Field: field, Value: val}, nil
+		return Eq(field, val), nil
 	}
 }
 
@@ -246,63 +203,63 @@ func (p *parser) parseNumber() (any, error) {
 // optimizedAst := Optimize(ast)
 //
 // return optimizedAst, nil
-func Optimize(f Filter) Filter {
-	switch node := f.(type) {
-
-	case *And:
-		node.Left = Optimize(node.Left)
-		node.Right = Optimize(node.Right)
-		return node
-
-	case *Or:
-		node.Left = Optimize(node.Left)
-		node.Right = Optimize(node.Right)
-		return node
-
-	case *Not:
-		// 1. Optimize the inner expression first
-		inner := Optimize(node.Expr)
-
-		// 2. Apply our Transformation Rules
-		switch in := inner.(type) {
-		case *Eq:
-			// Rule: NOT (A = B)  -->  A != B
-			return &Neq{Field: in.Field, Value: in.Value}
-
-		case *Neq:
-			// Rule: NOT (A != B)  -->  A = B
-			return &Eq{Field: in.Field, Value: in.Value}
-
-		case *Not:
-			// Rule: Double Negation: NOT (NOT A) --> A
-			return in.Expr
-
-		// --- NEW: De Morgan's Laws ---
-		case *And:
-			// Rule: NOT (A AND B) --> (NOT A) OR (NOT B)
-			newOr := &Or{
-				Left:  &Not{Expr: in.Left},
-				Right: &Not{Expr: in.Right},
-			}
-			// Recursively optimize the new structure to collapse the NOTs!
-			return Optimize(newOr)
-
-		case *Or:
-			// Rule: NOT (A OR B) --> (NOT A) AND (NOT B)
-			newAnd := &And{
-				Left:  &Not{Expr: in.Left},
-				Right: &Not{Expr: in.Right},
-			}
-			// Recursively optimize the new structure to collapse the NOTs!
-			return Optimize(newAnd)
-		// -----------------------------
-
-		default:
-			node.Expr = inner
-			return node
-		}
-
-	default:
-		return f
-	}
-}
+// func Optimize(f Filter) Filter {
+// 	switch node := f.(type) {
+//
+// 	case *And:
+// 		node.Left = Optimize(node.Left)
+// 		node.Right = Optimize(node.Right)
+// 		return node
+//
+// 	case *Or:
+// 		node.Left = Optimize(node.Left)
+// 		node.Right = Optimize(node.Right)
+// 		return node
+//
+// 	case *Not:
+// 		// 1. Optimize the inner expression first
+// 		inner := Optimize(node.Expr)
+//
+// 		// 2. Apply our Transformation Rules
+// 		switch in := inner.(type) {
+// 		case *Eq:
+// 			// Rule: NOT (A = B)  -->  A != B
+// 			return &Neq{Field: in.Field, Value: in.Value}
+//
+// 		case *Neq:
+// 			// Rule: NOT (A != B)  -->  A = B
+// 			return &Eq{Field: in.Field, Value: in.Value}
+//
+// 		case *Not:
+// 			// Rule: Double Negation: NOT (NOT A) --> A
+// 			return in.Expr
+//
+// 		// --- NEW: De Morgan's Laws ---
+// 		case *And:
+// 			// Rule: NOT (A AND B) --> (NOT A) OR (NOT B)
+// 			newOr := &Or{
+// 				Left:  &Not{Expr: in.Left},
+// 				Right: &Not{Expr: in.Right},
+// 			}
+// 			// Recursively optimize the new structure to collapse the NOTs!
+// 			return Optimize(newOr)
+//
+// 		case *Or:
+// 			// Rule: NOT (A OR B) --> (NOT A) AND (NOT B)
+// 			newAnd := &And{
+// 				Left:  &Not{Expr: in.Left},
+// 				Right: &Not{Expr: in.Right},
+// 			}
+// 			// Recursively optimize the new structure to collapse the NOTs!
+// 			return Optimize(newAnd)
+// 		// -----------------------------
+//
+// 		default:
+// 			node.Expr = inner
+// 			return node
+// 		}
+//
+// 	default:
+// 		return f
+// 	}
+// }

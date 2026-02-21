@@ -39,8 +39,9 @@ func TestMapIndex_UnSet(t *testing.T) {
 
 	// remove the last one: 42
 	unSet(mi, 42, 42)
-	_, err = mi.Get(Equal, 42)
-	assert.ErrorIs(t, ErrValueNotFound{42}, err)
+	bs, err = mi.Get(Equal, 42)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, bs.Count())
 
 	// remove value 3
 	unSet(mi, 3, 3)
@@ -48,8 +49,9 @@ func TestMapIndex_UnSet(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, bs.Count())
 	unSet(mi, 3, 5)
-	_, err = mi.Get(Equal, 3)
-	assert.ErrorIs(t, ErrValueNotFound{3}, err)
+	bs, err = mi.Get(Equal, 3)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, bs.Count())
 
 	// for value 1 is no row 99, no deletion (ignored)
 	unSet(mi, 1, 99)
@@ -59,8 +61,9 @@ func TestMapIndex_UnSet(t *testing.T) {
 
 	// remove value 1
 	unSet(mi, 1, 1)
-	_, err = mi.Get(Equal, 1)
-	assert.ErrorIs(t, ErrValueNotFound{1}, err)
+	bs, err = mi.Get(Equal, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, bs.Count())
 }
 
 func TestMapIndex_Get(t *testing.T) {
@@ -76,10 +79,12 @@ func TestMapIndex_Get(t *testing.T) {
 	assert.Equal(t, []uint32{3, 5}, bs.ToSlice())
 
 	// not found
-	_, err := mi.Get(Equal, 7)
-	assert.ErrorIs(t, ErrValueNotFound{7}, err)
+	bs, err := mi.Get(Equal, 7)
+	assert.NoError(t, err)
+	assert.True(t, bs.IsEmpty())
+
 	// invalid relation
-	_, err = mi.Get(Greater, 1)
+	bs, err = mi.Get(Greater, 1)
 	assert.ErrorIs(t, ErrInvalidRelation{Greater}, err)
 }
 
@@ -104,8 +109,8 @@ func TestMapIndex_Query(t *testing.T) {
 
 	// not found
 	result, _, err = Eq("val", 99)(fi, nil)
-	assert.ErrorIs(t, ErrValueNotFound{99}, err)
-	assert.Nil(t, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, result.Count())
 
 	// invalid field
 	result, _, err = Eq("bad", 1)(fi, nil)

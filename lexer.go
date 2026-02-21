@@ -1,4 +1,4 @@
-package query
+package main
 
 import "fmt"
 
@@ -47,7 +47,7 @@ func (t tokenType) String() string {
 	case tokAnd:
 		return "and"
 	case tokOr:
-		return "sor"
+		return "or"
 	case tokNot:
 		return "not"
 	case tokLParen:

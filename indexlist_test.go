@@ -130,7 +130,7 @@ func TestIndexList_QueryResult(t *testing.T) {
 	qr, err := il.Query(Eq("age", uint8(22)))
 	assert.NoError(t, err)
 
-	assert.False(t, qr.Empty())
+	assert.False(t, qr.IsEmpty())
 	assert.Equal(t, 4, qr.Count())
 
 	assert.Equal(t, []car{
@@ -169,7 +169,7 @@ func TestIndexList_Remove(t *testing.T) {
 	qr, err := il.Query(All())
 	assert.NoError(t, err)
 
-	assert.False(t, qr.Empty())
+	assert.False(t, qr.IsEmpty())
 	assert.Equal(t, 5, qr.Count())
 
 	// remove item on index 3
@@ -230,9 +230,10 @@ func TestIndexList_RemoveLater(t *testing.T) {
 	assert.Equal(t, 0, qr2.Count())
 	assert.Equal(t, 3, il.Count())
 
-	_, err = il.Query(Eq("name", "Dacia"))
+	qr, err := il.Query(Eq("name", "Dacia"))
 	// Dacia doesn't exist anymore
-	assert.ErrorIs(t, ErrValueNotFound{"Dacia"}, err)
+	assert.NoError(t, err)
+	assert.True(t, qr.IsEmpty())
 
 	// qr1 has allready remove all Dacia
 	qr2.RemoveAll()
