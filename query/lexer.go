@@ -1,18 +1,63 @@
 package query
 
+import "fmt"
+
 type tokenType uint8
 
 const (
-	tokEOF tokenType = iota
+	tokUndefined tokenType = iota
+	// end of file
+	tokEOF
+	// ident
 	tokIdent
+	// datatypes
 	tokString
 	tokNumber
+	tokBool
+	// relations
 	tokEq
+	tokNeq
+	// logical combinations
 	tokAnd
 	tokOr
+	tokNot
+	// parentheses
 	tokLParen
 	tokRParen
 )
+
+func (t tokenType) String() string {
+	switch t {
+	case tokUndefined:
+		return "undefined"
+	case tokEOF:
+		return "EOF"
+	case tokIdent:
+		return "indent"
+	case tokString:
+		return "string"
+	case tokNumber:
+		return "number"
+	case tokBool:
+		return "bool"
+	case tokEq:
+		return "="
+	case tokNeq:
+		return "!="
+	case tokAnd:
+		return "and"
+	case tokOr:
+		return "sor"
+	case tokNot:
+		return "not"
+	case tokLParen:
+		return "("
+	case tokRParen:
+		return ")"
+	default:
+		return fmt.Sprintf("UNKNOWN: %d", t)
+	}
+}
 
 type token struct {
 	Start int
@@ -55,10 +100,22 @@ func (l *lexer) nextToken() token {
 		start := l.pos
 		l.pos++
 		return token{Type: tokEq, Start: start, End: l.pos}
+
+	case ch == '!':
+		start := l.pos
+		// Check if the next byte exists and is '='
+		if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+			l.pos += 2 // Consume both '!' and '='
+			return token{Type: tokNeq, Start: start, End: l.pos}
+		}
+		// Optional: Handle a lone '!' if you want a NOT operator later
+		l.pos++
+		// return token{Type: tokIllegal...}
+
 	case ch == '"', ch == '\'':
 		return l.readString(ch)
 	case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_':
-		return l.readIdentOrKeyword()
+		return l.readBoolOrIdentOrKeyword()
 	case (ch >= '0' && ch <= '9') || ch == '-':
 		return l.readNumber()
 	}
@@ -68,8 +125,10 @@ func (l *lexer) nextToken() token {
 }
 
 // readIdentOrKeyword checks if the word is AND / OR without allocating memory
-func (l *lexer) readIdentOrKeyword() token {
+func (l *lexer) readBoolOrIdentOrKeyword() token {
 	start := l.pos
+	// read while are there letters, numbers or _
+	// it starts with a letter
 	for l.pos < len(l.input) {
 		ch := l.input[l.pos]
 		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' {
@@ -80,20 +139,42 @@ func (l *lexer) readIdentOrKeyword() token {
 	}
 
 	length := l.pos - start
-	// Zero-allocation keyword check
-	if length == 3 {
-		b := l.input[start:]
-		if (b[0] == 'a' || b[0] == 'A') && (b[1] == 'n' || b[1] == 'N') && (b[2] == 'd' || b[2] == 'D') {
-			return token{Type: tokAnd, Start: start, End: l.pos}
-		}
-	}
-	if length == 2 {
-		b := l.input[start:]
+	b := l.input[start:]
+
+	// evaluate the founded string
+	// Fast Keyword & Boolean Checks
+	switch length {
+	case 2:
 		if (b[0] == 'o' || b[0] == 'O') && (b[1] == 'r' || b[1] == 'R') {
 			return token{Type: tokOr, Start: start, End: l.pos}
 		}
+	case 3:
+		if (b[0] == 'a' || b[0] == 'A') && (b[1] == 'n' || b[1] == 'N') && (b[2] == 'd' || b[2] == 'D') {
+			return token{Type: tokAnd, Start: start, End: l.pos}
+		}
+		if (b[0] == 'n' || b[0] == 'N') && (b[1] == 'o' || b[1] == 'O') && (b[2] == 't' || b[2] == 'T') {
+			return token{Type: tokNot, Start: start, End: l.pos}
+		}
+	case 4:
+		// check for "true" (Case Insensitive)
+		if (b[0] == 't' || b[0] == 'T') &&
+			(b[1] == 'r' || b[1] == 'R') &&
+			(b[2] == 'u' || b[2] == 'U') &&
+			(b[3] == 'e' || b[3] == 'E') {
+			return token{Type: tokBool, Start: start, End: l.pos}
+		}
+	case 5:
+		// check for "false" (Case Insensitive)
+		if (b[0] == 'f' || b[0] == 'F') &&
+			(b[1] == 'a' || b[1] == 'A') &&
+			(b[2] == 'l' || b[2] == 'L') &&
+			(b[3] == 's' || b[3] == 'S') &&
+			(b[4] == 'e' || b[4] == 'E') {
+			return token{Type: tokBool, Start: start, End: l.pos}
+		}
 	}
 
+	// If it didn't match any of the keywords, it's just a normal identifier
 	return token{Type: tokIdent, Start: start, End: l.pos}
 }
 
