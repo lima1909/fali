@@ -13,10 +13,7 @@ import (
 //
 // Think of a SkipList as a standard Sorted Linked List but with "express lanes."
 //
-// The zero value is not allowed as Key!
-//
 // https://en.wikipedia.org/wiki/Skip_list
-//
 
 const (
 	maxLevel   = 16 // supports up to ~4.3 million elements
@@ -80,14 +77,7 @@ func (sl *SkipList[K, V]) Get(key K) (V, bool) {
 
 // Put inserts or updates a key with the given value.
 // Returns true if a new node was inserted, false if an existing key was updated.
-//
-// Panics if the key: K is the zero default value (0 for int, "" for string, ...)!
 func (sl *SkipList[K, V]) Put(key K, value V) bool {
-	var k K
-	if key == k {
-		panic(fmt.Sprintf("The zero default value the Key: '%v' is not allowed", key))
-	}
-
 	update := [maxLevel]*node[K, V]{}
 	x := sl.head
 
@@ -211,62 +201,93 @@ func (sl *SkipList[K, V]) Range(from, to K, visit VisitFn[K, V]) {
 
 // Less calls visit for all keys < the given key
 func (sl *SkipList[K, V]) Less(key K, visit VisitFn[K, V]) {
-	if minKey, found := sl.MinKey(); found {
-		sl.Range(minKey, key, func(k K, v V) bool {
-			if k == key {
-				return false
-			}
-
-			return visit(k, v)
-		})
+	// start directly at the first element (Level 0)
+	for x := sl.head.next[0]; x != nil && x.key < key; x = x.next[0] {
+		// stop immediately if the visitor returns false
+		if !visit(x.key, x.value) {
+			return
+		}
 	}
 }
 
 // LessEqual calls visit for all keys <= the given key
 func (sl *SkipList[K, V]) LessEqual(key K, visit VisitFn[K, V]) {
-	if minKey, found := sl.MinKey(); found {
-		sl.Range(minKey, key, func(k K, v V) bool {
-			return visit(k, v)
-		})
+	// start directly at the first element (Level 0)
+	for x := sl.head.next[0]; x != nil && x.key <= key; x = x.next[0] {
+		if !visit(x.key, x.value) {
+			return
+		}
 	}
 }
 
 // Greater calls visit for all keys > the given key
 func (sl *SkipList[K, V]) Greater(key K, visit VisitFn[K, V]) {
-	if maxKey, found := sl.MaxKey(); found {
-		sl.Range(key, maxKey, func(k K, v V) bool {
-			if k == key {
-				// ignore, because greater
-				return true
-			}
+	x := sl.head
 
-			return visit(k, v)
-		})
+	// jump to the starting point
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
+			x = next
+		}
+	}
+
+	// walk right until the end of the list
+	for x = x.next[0]; x != nil; x = x.next[0] {
+		if x.key == key {
+			continue
+		}
+		if !visit(x.key, x.value) {
+			return
+		}
 	}
 }
 
 // GreaterEqual calls visit for all keys >= the given key
 func (sl *SkipList[K, V]) GreaterEqual(key K, visit VisitFn[K, V]) {
-	if maxKey, found := sl.MaxKey(); found {
-		sl.Range(key, maxKey, func(k K, v V) bool {
-			return visit(k, v)
-		})
+	x := sl.head
+
+	// jump to the starting point
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for next := x.next[i]; next != nil && next.key < key; next = x.next[i] {
+			x = next
+		}
+	}
+
+	// walk right until the end of the list
+	for x = x.next[0]; x != nil; x = x.next[0] {
+		if !visit(x.key, x.value) {
+			return
+		}
 	}
 }
 
 // StringStartsWith finds all keys with the given prefix.
 // If prefix (K) is not a string, this method panics!
-func (sl *SkipList[K, V]) StringStartsWith(prefix K, visit VisitFn[K, V]) {
-	if maxString, found := sl.MaxKey(); found {
-		prefixStr := any(prefix).(string)
-		sl.Range(prefix, maxString, func(k K, v V) bool {
-			if !strings.HasPrefix(any(k).(string), prefixStr) {
-				return false
-			}
-
-			return visit(k, v)
-		})
+func (sl *SkipList[K, V]) StringStartsWith(prefix K, visit VisitFn[K, V]) bool {
+	prefixStr, ok := any(prefix).(string)
+	if !ok {
+		panic(fmt.Sprintf("StringStartsWith supports only strings, not: %T", prefix))
 	}
+
+	x := sl.head
+	for i := int(sl.level) - 1; i >= 0; i-- {
+		for next := x.next[i]; next != nil && next.key < prefix; next = x.next[i] {
+			x = next
+		}
+	}
+
+	for x = x.next[0]; x != nil; x = x.next[0] {
+		// We still have to box x.key here, but we stop as soon as it mismatches
+		kStr := any(x.key).(string)
+		if !strings.HasPrefix(kStr, prefixStr) {
+			break
+		}
+		if !visit(x.key, x.value) {
+			break
+		}
+	}
+
+	return true
 }
 
 // MinKey returns the first (smallest) Key

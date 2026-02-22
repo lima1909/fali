@@ -43,14 +43,18 @@ func TestSplitList_NilValue(t *testing.T) {
 }
 
 func TestSplitList_PutWithZeroValueKey(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("Expected panic when putting zero value as Key")
-		}
-	}()
+	sl1 := NewSkipList[string, string]()
+	sl1.Put("", "---")
+	result1, found1 := sl1.Get("")
+	assert.True(t, found1)
+	assert.Equal(t, "---", result1)
 
-	sl := NewSkipList[string, string]()
-	sl.Put("", "---")
+	sl2 := NewSkipList[int, string]()
+	sl2.Put(0, "---")
+	sl2.Put(1, "+++")
+	result2, found2 := sl2.Get(0)
+	assert.True(t, found2)
+	assert.Equal(t, "---", result2)
 }
 
 func TestSplitList_DeleteAndGetTheZeroValueKey(t *testing.T) {

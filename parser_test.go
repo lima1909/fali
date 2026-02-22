@@ -28,7 +28,6 @@ func TestParser_Base(t *testing.T) {
 	indexMap.index["role"] = NewSortedIndex((*User).Role)
 	indexMap.index["role"].Set(&user, 1)
 	indexMap.index["price"] = NewMapIndex((*User).Price)
-	// indexMap.index["price"].Set(&User{}, 0)
 	indexMap.index["price"].Set(&user, 1)
 	indexMap.index["ok"] = NewMapIndex((*User).Ok)
 	indexMap.index["ok"].Set(&User{ok: true}, 0)
