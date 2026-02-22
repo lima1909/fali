@@ -118,7 +118,7 @@ func (p *parser) parseCondition() (Query32, error) {
 	// is the relation supported
 	relTokenType := p.cur.Type
 	switch relTokenType {
-	case tokEq, tokNeq:
+	case tokEq, tokNeq, tokLess, tokLessEq, tokGreater, tokGreaterEq:
 	// supported relation, do nothing here
 	default:
 		return nil, ErrUnexpectedToken{token: p.cur, expected: tokEq}
@@ -149,6 +149,14 @@ func (p *parser) parseCondition() (Query32, error) {
 	switch relTokenType {
 	case tokNeq:
 		return NotEq(field, val), nil
+	case tokLess:
+		return Lt(field, val), nil
+	case tokLessEq:
+		return Le(field, val), nil
+	case tokGreater:
+		return Gt(field, val), nil
+	case tokGreaterEq:
+		return Ge(field, val), nil
 	default:
 		// must be Eq, the evaluation was already
 		return Eq(field, val), nil

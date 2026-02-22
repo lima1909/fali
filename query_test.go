@@ -84,7 +84,7 @@ func TestMapIndex_Get(t *testing.T) {
 	assert.True(t, bs.IsEmpty())
 
 	// invalid relation
-	bs, err = mi.Get(Greater, 1)
+	_, err = mi.Get(Greater, 1)
 	assert.ErrorIs(t, ErrInvalidRelation{Greater}, err)
 }
 

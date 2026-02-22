@@ -27,7 +27,8 @@ func TestParser_Base(t *testing.T) {
 	indexMap.index["name"].Set(&user, 1)
 	indexMap.index["role"] = NewSortedIndex((*User).Role)
 	indexMap.index["role"].Set(&user, 1)
-	indexMap.index["price"] = NewMapIndex((*User).Price)
+	indexMap.index["price"] = NewSortedIndex((*User).Price)
+	indexMap.index["price"].Set(&User{price: 3.0}, 0)
 	indexMap.index["price"].Set(&user, 1)
 	indexMap.index["ok"] = NewMapIndex((*User).Ok)
 	indexMap.index["ok"].Set(&User{ok: true}, 0)
@@ -46,9 +47,12 @@ func TestParser_Base(t *testing.T) {
 		{query: `ok = false`, expected: []uint32{1}},
 		{query: `ok = true`, expected: []uint32{0}},
 		{query: `NOT(ok = true)`, expected: []uint32{1}},
+		{query: `price < 3.0`, expected: []uint32{1}},
+		{query: `price <= 3.0`, expected: []uint32{0, 1}},
+		{query: `price > 1.2`, expected: []uint32{0}},
+		{query: `price >= 1.2`, expected: []uint32{0, 1}},
 
 		{query: `ok = true or price = 0.0`, expected: []uint32{0}},
-
 		{query: `role = "admin" AND price = 9.9`, expected: []uint32{}},
 		{query: `role = "admin" OR price = 9.9`, expected: []uint32{1}},
 		{query: `not (ok = true or price = 0.0)`, expected: []uint32{1}},

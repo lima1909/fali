@@ -24,6 +24,10 @@ func TestLexer_OneToken(t *testing.T) {
 		{query: ` noT `, expected: tokNot},
 		{query: ` = `, expected: tokEq},
 		{query: ` != `, expected: tokNeq},
+		{query: ` < `, expected: tokLess},
+		{query: `<=`, expected: tokLessEq},
+		{query: ` > `, expected: tokGreater},
+		{query: `>=`, expected: tokGreaterEq},
 		{query: `(`, expected: tokLParen},
 		{query: `)`, expected: tokRParen},
 	}

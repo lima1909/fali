@@ -17,6 +17,10 @@ const (
 	// relations
 	tokEq
 	tokNeq
+	tokLess
+	tokLessEq
+	tokGreater
+	tokGreaterEq
 	// logical combinations
 	tokAnd
 	tokOr
@@ -44,6 +48,14 @@ func (t tokenType) String() string {
 		return "="
 	case tokNeq:
 		return "!="
+	case tokLess:
+		return "<"
+	case tokLessEq:
+		return "<="
+	case tokGreater:
+		return ">"
+	case tokGreaterEq:
+		return ">="
 	case tokAnd:
 		return "and"
 	case tokOr:
@@ -110,8 +122,22 @@ func (l *lexer) nextToken() token {
 		}
 		// Optional: Handle a lone '!' if you want a NOT operator later
 		l.pos++
-		// return token{Type: tokIllegal...}
-
+	case ch == '<':
+		start := l.pos
+		if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+			l.pos += 2
+			return token{Type: tokLessEq, Start: start, End: l.pos}
+		}
+		l.pos++
+		return token{Type: tokLess, Start: start, End: l.pos}
+	case ch == '>':
+		start := l.pos
+		if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+			l.pos += 2
+			return token{Type: tokGreaterEq, Start: start, End: l.pos}
+		}
+		l.pos++
+		return token{Type: tokGreater, Start: start, End: l.pos}
 	case ch == '"', ch == '\'':
 		return l.readString(ch)
 	case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_':
