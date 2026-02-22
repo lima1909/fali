@@ -305,3 +305,19 @@ func TestBitSet_Range(t *testing.T) {
 		})
 	}
 }
+
+func TestBitSet_Clear(t *testing.T) {
+	b := NewBitSet[uint8]()
+	b.Set(0)
+	b.Set(1)
+	b.Set(68)
+
+	assert.True(t, b.Contains(1))
+	assert.Equal(t, 3, b.Count())
+
+	b.Clear()
+	assert.False(t, b.Contains(1))
+	assert.Equal(t, 0, b.Count())
+	assert.Equal(t, 0, len(b.data))
+	assert.Equal(t, 2, cap(b.data))
+}

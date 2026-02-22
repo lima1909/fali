@@ -276,7 +276,7 @@ func TestIndexList_RemoveLater(t *testing.T) {
 
 	qr1.RemoveAll()
 	assert.Equal(t, 0, qr1.Count())
-	assert.Equal(t, 0, qr2.Count())
+	assert.Equal(t, 2, qr2.Count())
 	assert.Equal(t, 3, il.Count())
 
 	qr, err := il.Query(Eq("name", "Dacia"))
@@ -562,4 +562,30 @@ func TestIndexList_Pagination(t *testing.T) {
 	result, pi = qr.Pagination(3, 1)
 	assert.Equal(t, PageInfo{Offset: 3, Limit: 1, Count: 0, Total: 3}, pi)
 	assert.Equal(t, []car{}, result)
+}
+
+func TestIndexList_QueryStr(t *testing.T) {
+	il := NewIndexListWithID((*car).Name)
+	err := il.CreateIndex("name", NewSortedIndex((*car).Name))
+	assert.NoError(t, err)
+
+	il.Insert(car{name: "Opel", age: 22})
+	il.Insert(car{name: "Mercedes", age: 5, isNew: true})
+	il.Insert(car{name: "Dacia", age: 22})
+	il.Insert(car{name: "Opel", age: 2})
+
+	qr, err := il.QueryStr(`name = "Opel"`)
+	assert.NoError(t, err)
+	assert.Equal(t, []car{
+		{name: "Opel", age: 22},
+		{name: "Opel", age: 2},
+	}, qr.Values())
+
+	qr, err = il.QueryStr(`name = "Opel" or name = "Dacia"`)
+	assert.NoError(t, err)
+	assert.Equal(t, []car{
+		{name: "Opel", age: 22},
+		{name: "Dacia", age: 22},
+		{name: "Opel", age: 2},
+	}, qr.Values())
 }

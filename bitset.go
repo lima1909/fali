@@ -201,6 +201,9 @@ func (b *BitSet[V]) Len() int { return len(b.data) }
 // how many bytes is using
 func (b *BitSet[V]) usedBytes() int { return 24 + (len(b.data) * 8) }
 
+// Clear removes all bits
+func (b *BitSet[V]) Clear() { b.data = b.data[:0] }
+
 // Copy copy the complete BitSet.
 func (b *BitSet[V]) Copy() *BitSet[V] {
 	target := make([]uint64, len(b.data))

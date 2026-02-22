@@ -171,19 +171,28 @@ func (l *IndexList[T, ID]) Contains(id ID) bool {
 	return err == nil
 }
 
-// Query execute the given Query.
-func (l *IndexList[T, ID]) Query(query Query32) (QueryResult[T, ID], error) {
-	l.lock.RLock()
-	bs, _, err := query(l.indexMap.LookupByName, l.indexMap.allIDs)
-	l.lock.RUnlock()
-
+func (l *IndexList[T, ID]) QueryStr(queryStr string) (QueryResult[T, ID], error) {
+	query, err := Parse(queryStr)
 	if err != nil {
 		return QueryResult[T, ID]{}, err
 	}
 
-	// if !canMutate {
-	// 	bs = bs.Copy()
-	// }
+	return l.Query(query)
+}
+
+// Query execute the given Query.
+func (l *IndexList[T, ID]) Query(query Query32) (QueryResult[T, ID], error) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	bs, canMutate, err := query(l.indexMap.LookupByName, l.indexMap.allIDs)
+	if err != nil {
+		return QueryResult[T, ID]{}, err
+	}
+
+	if !canMutate {
+		bs = bs.Copy()
+	}
 
 	return QueryResult[T, ID]{bitSet: bs, list: l}, nil
 }
@@ -248,6 +257,8 @@ func (q *QueryResult[T, ID]) RemoveAll() {
 		q.list.removeNoLock(int(r))
 		return true
 	})
+
+	q.bitSet.Clear()
 }
 
 type PageInfo struct {
