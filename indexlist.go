@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -34,9 +35,14 @@ func NewIndexListWithID[T any, ID comparable](fieldIDGetFn func(*T) ID) *IndexLi
 //   - fieldName: a name for a field of the saved Item
 //   - fieldGetFn: a function, which returns the value of an field
 //   - Index: a impl of the Index interface
+//
+// Hint: empty field-name or the field-name ID are not allowed!
 func (l *IndexList[T, ID]) CreateIndex(fieldName string, index Index32[T]) error {
 	if fieldName == "" {
 		return fmt.Errorf("empty fieldName is not allowed")
+	}
+	if strings.ToUpper(fieldName) == "ID" {
+		return fmt.Errorf("ID is a reserved field name")
 	}
 
 	l.lock.Lock()
@@ -52,6 +58,30 @@ func (l *IndexList[T, ID]) CreateIndex(fieldName string, index Index32[T]) error
 
 	l.indexMap.index[fieldName] = index
 	return nil
+}
+
+// RemoveIndex removed a the Index with the given field-name (what the name of the Index is)
+// With the field-name: ID you can remove the ID-Index
+func (l *IndexList[T, ID]) RemoveIndex(fieldName string) {
+	if fieldName == "" {
+		return
+	}
+
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	if strings.ToUpper(fieldName) == "ID" {
+		l.indexMap.idIndex = nil
+		return
+	}
+
+	if index, exist := l.indexMap.index[fieldName]; exist {
+		for idx, item := range l.list.Iter() {
+			index.Set(&item, uint32(idx))
+		}
+	}
+
+	delete(l.indexMap.index, fieldName)
 }
 
 // Insert add the given Item to the list,

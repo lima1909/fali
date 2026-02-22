@@ -78,12 +78,61 @@ func TestIndexList_CreateIndex_Err(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not allowed")
 
+	err = il.CreateIndex("id", NewMapIndex((*car).Age))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ID is a reserved")
+
 	// field name already exist
 	err = il.CreateIndex("age", NewMapIndex((*car).Age))
 	assert.NoError(t, err)
 	err = il.CreateIndex("age", NewMapIndex((*car).Age))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "age already exists")
+}
+
+func TestIndexList_RemoveIndex(t *testing.T) {
+	il := NewIndexList[car]()
+	assert.Equal(t, 0, len(il.indexMap.index))
+	assert.Nil(t, il.indexMap.idIndex)
+	il.Insert(car{name: "Opel", age: 22})
+
+	err := il.CreateIndex("age", NewMapIndex((*car).Age))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(il.indexMap.index))
+
+	// check the filter/index
+	qr, err := il.Query(Eq("age", uint8(22)))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, qr.Count())
+
+	// not_found doesn't exist, nothing happend
+	il.RemoveIndex("not_found")
+	assert.Equal(t, 1, len(il.indexMap.index))
+
+	il.RemoveIndex("age")
+	assert.Equal(t, 0, len(il.indexMap.index))
+	_, err = il.Query(Eq("age", uint8(22)))
+	assert.ErrorIs(t, ErrInvalidIndexdName{"age"}, err)
+	// the index is removed, but not the data
+	assert.Equal(t, 1, il.Count())
+}
+
+func TestIndexList_RemoveIndexWithId(t *testing.T) {
+	il := NewIndexListWithID((*car).Name)
+	assert.NotNil(t, il.indexMap.idIndex)
+	il.Insert(car{name: "Opel", age: 22})
+	assert.Equal(t, 1, il.Count())
+
+	opel, err := il.Get("Opel")
+	assert.NoError(t, err)
+	assert.Equal(t, car{name: "Opel", age: 22}, opel)
+
+	il.RemoveIndex("id")
+	assert.Nil(t, il.indexMap.idIndex)
+	_, err = il.Get("Opel")
+	assert.ErrorIs(t, ErrNoIdIndexDefined{}, err)
+	// the index is removed, but not the data
+	assert.Equal(t, 1, il.Count())
 }
 
 func TestIndexList_Update(t *testing.T) {
