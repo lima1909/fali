@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -27,6 +28,10 @@ func (e ErrUnexpectedToken) Error() string {
 		e.token.End,
 	)
 }
+
+type ErrCast struct{ msg string }
+
+func (e ErrCast) Error() string { return fmt.Sprintf("cast err: %s", e.msg) }
 
 type parser struct {
 	input string
@@ -141,6 +146,31 @@ func (p *parser) parseCondition() (Query32, error) {
 			return nil, ErrUnexpectedToken{token: p.cur, expected: tokBool}
 		}
 		val = boolean
+
+	// value with cast: uint8(10)
+	case tokIdent:
+		typeName := p.input[p.cur.Start:p.cur.End]
+		p.next()
+		if p.cur.Type != tokLParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: tokLParen}
+		}
+		p.next()
+
+		if p.cur.Type == tokNumber {
+			num, err := p.parseNumber()
+			if err != nil {
+				return nil, ErrUnexpectedToken{token: p.cur, expected: tokNumber}
+			}
+			val, err = castValue(typeName, num)
+			if err != nil {
+				return nil, err
+			}
+			p.next()
+		}
+
+		if p.cur.Type != tokRParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: tokRParen}
+		}
 	default:
 		return nil, ErrUnexpectedToken{token: p.cur, expected: tokString}
 	}
@@ -161,6 +191,84 @@ func (p *parser) parseCondition() (Query32, error) {
 		// must be Eq, the evaluation was already
 		return Eq(field, val), nil
 	}
+}
+
+func castValue(typeName string, val any) (any, error) {
+	switch typeName {
+	case "int":
+		if v, ok := val.(int64); ok {
+			if v < math.MinInt && v > math.MaxInt {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return int(v), nil
+		}
+	case "int8":
+		if v, ok := val.(int64); ok {
+			if v < math.MinInt8 && v > math.MaxInt8 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return int8(v), nil
+		}
+	case "int16":
+		if v, ok := val.(int64); ok {
+			if v < math.MinInt16 && v > math.MaxInt16 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return int16(v), nil
+		}
+	case "int32":
+		if v, ok := val.(int64); ok {
+			if v < math.MinInt32 && v > math.MaxInt32 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return int32(v), nil
+		}
+
+	case "uint":
+		if v, ok := val.(int64); ok {
+			if v < 0 || v > math.MaxUint32 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return uint(v), nil
+		}
+	case "uint8":
+		if v, ok := val.(int64); ok {
+			if v < 0 || v > math.MaxUint8 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return uint8(v), nil
+		}
+	case "uint16":
+		if v, ok := val.(int64); ok {
+			if v < 0 || v > math.MaxUint16 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return uint16(v), nil
+		}
+	case "uint32":
+		if v, ok := val.(int64); ok {
+			if v < 0 || v > math.MaxUint32 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return uint32(v), nil
+		}
+
+	case "float32":
+		if v, ok := val.(int64); ok {
+			if float64(v) < math.SmallestNonzeroFloat32 && float64(v) > math.MaxFloat32 {
+				return nil, ErrCast{"to big for " + typeName}
+			}
+			return float32(v), nil
+		}
+		return float32(val.(float64)), nil
+	case "float64":
+		if v, ok := val.(int64); ok {
+			return float64(v), nil
+		}
+		return val.(float64), nil
+	}
+
+	return nil, fmt.Errorf("unsupported type hint: %s", typeName)
 }
 
 func (p *parser) parseNumber() (any, error) {
@@ -191,13 +299,13 @@ func (p *parser) parseNumber() (any, error) {
 		}
 	}
 
-	var v int
+	var v int64
 	for ; i < len(s); i++ {
 		c := s[i]
 		if c < '0' || c > '9' {
 			return nil, strconv.ErrSyntax
 		}
-		v = v*10 + int(c-'0')
+		v = v*10 + int64(c-'0')
 	}
 
 	if negative {

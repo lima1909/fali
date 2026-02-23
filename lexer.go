@@ -206,14 +206,27 @@ func (l *lexer) readBoolOrIdentOrKeyword() token {
 
 func (l *lexer) readNumber() token {
 	start := l.pos
+	hasDot := false
+
+	if l.pos < len(l.input) && l.input[l.pos] == '-' {
+		l.pos++
+	}
+
 	for l.pos < len(l.input) {
 		ch := l.input[l.pos]
-		if (ch >= '0' && ch <= '9') || ch == '.' {
+
+		if ch >= '0' && ch <= '9' {
+			l.pos++
+		} else if ch == '.' && !hasDot {
+			// First time seeing a dot, mark it and continue
+			hasDot = true
 			l.pos++
 		} else {
+			// If it's a second dot, a letter, or a space, we are done!
 			break
 		}
 	}
+
 	return token{Type: tokNumber, Start: start, End: l.pos}
 }
 

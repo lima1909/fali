@@ -568,17 +568,26 @@ func TestIndexList_QueryStr(t *testing.T) {
 	il := NewIndexListWithID((*car).Name)
 	err := il.CreateIndex("name", NewSortedIndex((*car).Name))
 	assert.NoError(t, err)
+	err = il.CreateIndex("age", NewSortedIndex((*car).Age))
+	assert.NoError(t, err)
 
 	il.Insert(car{name: "Opel", age: 22})
-	il.Insert(car{name: "Mercedes", age: 5, isNew: true})
+	il.Insert(car{name: "Mercedes", age: 5})
 	il.Insert(car{name: "Dacia", age: 22})
-	il.Insert(car{name: "Opel", age: 2})
+	il.Insert(car{name: "Opel", age: 5})
 
 	qr, err := il.QueryStr(`name = "Opel"`)
 	assert.NoError(t, err)
 	assert.Equal(t, []car{
 		{name: "Opel", age: 22},
-		{name: "Opel", age: 2},
+		{name: "Opel", age: 5},
+	}, qr.Values())
+
+	qr, err = il.QueryStr(`age = uint8(22)`)
+	assert.NoError(t, err)
+	assert.Equal(t, []car{
+		{name: "Opel", age: 22},
+		{name: "Dacia", age: 22},
 	}, qr.Values())
 
 	qr, err = il.QueryStr(`name = "Opel" or name = "Dacia"`)
@@ -586,6 +595,6 @@ func TestIndexList_QueryStr(t *testing.T) {
 	assert.Equal(t, []car{
 		{name: "Opel", age: 22},
 		{name: "Dacia", age: 22},
-		{name: "Opel", age: 2},
+		{name: "Opel", age: 5},
 	}, qr.Values())
 }
