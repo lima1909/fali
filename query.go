@@ -125,8 +125,24 @@ func NotEq(fieldName string, val any) Query32 { return notEq[uint32](fieldName, 
 //go:inline
 func notEq[LI Value](fieldName string, val any) Query[LI] {
 	return func(l LookupByName[LI], allIDs *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
-		eq := rel[LI](fieldName, Equal, val)
-		return Not(eq)(l, allIDs)
+		lookup, err := l(fieldName)
+		if err != nil {
+			return nil, false, err
+		}
+
+		exclude, err := lookup.Get(Equal, val)
+		if err != nil {
+			return nil, false, err
+		}
+
+		// OPTIMIZATION: If nobody has this value, NotEq is just "All"
+		if exclude.Count() == 0 {
+			return allIDs, false, nil
+		}
+
+		result := allIDs.Copy()
+		result.AndNot(exclude)
+		return result, true, nil
 	}
 }
 
@@ -196,6 +212,34 @@ func Or[LI Value](a Query[LI], b Query[LI], other ...Query[LI]) Query[LI] {
 			}
 			result.Or(next)
 		}
+
+		return result, true, nil
+	}
+}
+
+// AndNot performs: baseQuery AND NOT(subQuery)
+// example: status = 'active' AND type != 'guest'
+func AndNot[LI Value](base Query[LI], sub Query[LI]) Query[LI] {
+	return func(l LookupByName[LI], allIDs *BitSet[LI]) (*BitSet[LI], bool, error) {
+		// base result (e.g., the 'active')
+		result, canMutate, err := base(l, allIDs)
+		if err != nil {
+			return nil, false, err
+		}
+
+		// early return, if result is false (empty), stop immediately
+		if result.IsEmpty() {
+			return result, canMutate, nil
+		}
+
+		// sub result (e.g., the 'guests')
+		exclude, _, err := sub(l, allIDs)
+		if err != nil {
+			return nil, false, err
+		}
+
+		result, err = ensureMutable(result, canMutate, nil)
+		result.AndNot(exclude)
 
 		return result, true, nil
 	}

@@ -231,6 +231,12 @@ func (b *BitSet[V]) CopyInto(buf []uint64) *BitSet[V] {
 // In this BitSet is the result, this means the values will be overwritten!
 func (b *BitSet[V]) And(other *BitSet[V]) {
 	l := min(len(b.data), len(other.data))
+
+	// zero out the tail to prevent "Zombie Bits"
+	for i := l; i < len(b.data); i++ {
+		b.data[i] = 0
+	}
+
 	b.data = b.data[:l]
 
 	// BCE: Bounds Check Elimination

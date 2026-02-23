@@ -33,6 +33,8 @@ func TestLexer_OneToken(t *testing.T) {
 		{query: `>=`, expected: tokGreaterEq},
 		{query: `(`, expected: tokLParen},
 		{query: `)`, expected: tokRParen},
+
+		{query: `startswith`, expected: tokIdent},
 	}
 
 	for _, tt := range tests {
@@ -106,6 +108,12 @@ func TestLexer_ManyToken(t *testing.T) {
 			tokIdent,
 			tokEq,
 			tokNumber,
+		}},
+
+		{query: `name startswith "Ma"`, expected: []tokenType{
+			tokIdent,
+			tokIdent,
+			tokString,
 		}},
 	}
 
