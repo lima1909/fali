@@ -6,37 +6,132 @@ import (
 	"strconv"
 )
 
-type ErrUnexpectedToken struct {
-	token    token
-	expected tokenType
+type ExprKind uint8
+
+const (
+	ExprTerm ExprKind = iota
+	ExprOr
+	ExprAnd
+	ExprAndNot
+	ExprNot
+)
+
+type Expr interface{ kind() ExprKind }
+
+type BinaryExpr struct {
+	Op    ExprKind // exprOr, exprAnd, exprAndNot
+	Left  Expr
+	Right Expr
 }
 
-func (e ErrUnexpectedToken) Error() string {
-	if e.expected == tokUndefined {
-		return fmt.Sprintf(
-			"unexpected token: %q [%d:%d]",
-			e.token.Type,
-			e.token.Start,
-			e.token.End,
-		)
-	}
-	return fmt.Sprintf(
-		"unexpected token: %q, expected: %q [%d:%d]",
-		e.token.Type,
-		e.expected,
-		e.token.Start,
-		e.token.End,
-	)
+func (e BinaryExpr) kind() ExprKind { return e.Op }
+
+type NotExpr struct{ Child Expr }
+
+func (e NotExpr) kind() ExprKind { return ExprNot }
+
+type TermExpr struct {
+	Field string
+	Op    Op
+	Value any
 }
 
-type ErrCast struct{ msg string }
+func (e TermExpr) kind() ExprKind { return ExprTerm }
 
-func (e ErrCast) Error() string { return fmt.Sprintf("cast err: %s", e.msg) }
-
+// Parser impl starts
 type parser struct {
 	input string
 	lex   lexer
 	cur   token
+}
+
+func optimize(e Expr) Expr {
+	if e == nil {
+		return nil
+	}
+
+	switch n := e.(type) {
+	case BinaryExpr:
+		left := optimize(n.Left)
+		right := optimize(n.Right)
+
+		// RULE: And(A, Not(B)) -> AndNot(A, B)
+		if n.Op == ExprAnd {
+			if notNode, ok := right.(NotExpr); ok {
+				return BinaryExpr{Op: ExprAndNot, Left: left, Right: notNode.Child}
+			}
+			if notNode, ok := left.(NotExpr); ok {
+				return BinaryExpr{Op: ExprAndNot, Left: right, Right: notNode.Child}
+			}
+		}
+		return BinaryExpr{Op: n.Op, Left: left, Right: right}
+
+	case NotExpr:
+		child := optimize(n.Child)
+		switch c := child.(type) {
+		// RULE: Not(Not(A)) -> A (Double Negative)
+		case NotExpr:
+			return optimize(c.Child)
+		case TermExpr:
+			switch c.Op {
+			// I'm not sure, that this is faster
+			// RULE: NOT (A = B)  -->  A != B
+			// 	case OpEq:
+			// 		return TermExpr{Field: c.Field, Op: OpNeq, Value: c.Value}
+			// RULE: NOT (A != B)  -->  A = B
+			case OpNeq:
+				return TermExpr{Field: c.Field, Op: OpEq, Value: c.Value}
+			// RULE: NOT (A > B) --> A <= B
+			case OpGt:
+				return TermExpr{Field: c.Field, Op: OpLe, Value: c.Value}
+			// RULE: NOT (A >= B) --> A < B
+			case OpGe:
+				return TermExpr{Field: c.Field, Op: OpLt, Value: c.Value}
+			// RULE: NOT (A < B) --> A >= B
+			case OpLt:
+				return TermExpr{Field: c.Field, Op: OpGe, Value: c.Value}
+			// RULE: NOT (A <= B) --> A > B
+			case OpLe:
+				return TermExpr{Field: c.Field, Op: OpGt, Value: c.Value}
+
+			default:
+				//  no otimizations
+				return n
+			}
+		default:
+			//  no otimizations
+			return n
+
+		}
+	default:
+		return e
+	}
+}
+
+func compile(e Expr) Query32 {
+	switch n := e.(type) {
+	case TermExpr:
+		return rel[uint32](n.Field, n.Op, n.Value)
+
+	case NotExpr:
+		return Not(compile(n.Child))
+
+	case BinaryExpr:
+		left := compile(n.Left)
+		right := compile(n.Right)
+
+		switch n.Op {
+		case ExprAnd:
+			return And(left, right)
+		case ExprOr:
+			return Or(left, right)
+		case ExprAndNot:
+			// This calls the new high-performance AndNot we discussed!
+			return AndNot(left, right)
+		}
+	}
+
+	return All()
 }
 
 func Parse(input string) (Query32, error) {
@@ -46,120 +141,130 @@ func Parse(input string) (Query32, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p.cur.Type != tokEOF {
+	if p.cur.Op != OpEOF {
 		return nil, ErrUnexpectedToken{token: p.cur}
 	}
-	return ast, nil
+
+	optAst := optimize(ast)
+	query := compile(optAst)
+
+	return query, nil
 }
 
 //go:inline
 func (p *parser) next() { p.cur = p.lex.nextToken() }
 
-func (p *parser) parseOr() (Query32, error) {
+func (p *parser) parseOr() (Expr, error) {
 	// the rule: AND before OR
 	left, err := p.parseAnd()
 	if err != nil {
 		return nil, err
 	}
 
-	for p.cur.Type == tokOr {
+	for p.cur.Op == OpOr {
 		p.next()
 		right, err := p.parseAnd()
 		if err != nil {
 			return nil, err
 		}
-		left = Or(left, right)
+		left = BinaryExpr{Op: ExprOr, Left: left, Right: right}
 	}
 	return left, nil
 }
 
-func (p *parser) parseAnd() (Query32, error) {
+func (p *parser) parseAnd() (Expr, error) {
 	left, err := p.parseCondition()
 	if err != nil {
 		return nil, err
 	}
 
-	for p.cur.Type == tokAnd {
+	for p.cur.Op == OpAnd {
 		p.next()
 		right, err := p.parseCondition()
 		if err != nil {
 			return nil, err
 		}
-		left = And(left, right)
+		left = BinaryExpr{Op: ExprAnd, Left: left, Right: right}
 	}
 	return left, nil
 }
 
-func (p *parser) parseCondition() (Query32, error) {
-	if p.cur.Type == tokNot {
+func (p *parser) parseCondition() (Expr, error) {
+	if p.cur.Op == OpNot {
 		p.next() // consume 'NOT'
 		// Recursively parse the expression that follows
 		expr, err := p.parseCondition()
 		if err != nil {
 			return nil, err
 		}
-		return Not(expr), nil
+		return NotExpr{Child: expr}, nil
 	}
 
-	if p.cur.Type == tokLParen {
+	if p.cur.Op == OpLParen {
 		p.next()
 		expr, err := p.parseOr() // Back to the top of the precedence chain
 		if err != nil {
 			return nil, err
 		}
-		if p.cur.Type != tokRParen {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: tokRParen}
+		if p.cur.Op != OpRParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpRParen}
 		}
 		p.next()
 		return expr, nil
 	}
 
-	if p.cur.Type != tokIdent {
-		return nil, ErrUnexpectedToken{token: p.cur, expected: tokIdent}
+	if p.cur.Op != OpIdent {
+		return nil, ErrUnexpectedToken{token: p.cur, expected: OpIdent}
 	}
 	field := p.input[p.cur.Start:p.cur.End]
 	p.next()
 
 	// is the relation supported
-	relTokenType := p.cur.Type
-	switch relTokenType {
-	case tokEq, tokNeq, tokLess, tokLessEq, tokGreater, tokGreaterEq:
-	// supported relation, do nothing here
+	tokenOp := p.cur.Op
+	var termExpr TermExpr
+	switch tokenOp {
+	case OpNeq:
+		// make it later to an Neq, if we have the value
+		termExpr = TermExpr{Field: field, Op: OpEq}
+	case OpLt, OpLe, OpGt, OpGe, OpEq:
+		termExpr = TermExpr{Field: field, Op: tokenOp}
+	// case tokIdent:
+	// maybe relations like startswith
 	default:
-		return nil, ErrUnexpectedToken{token: p.cur, expected: tokEq}
+		return nil, ErrUnexpectedToken{token: p.cur, expected: OpEq}
 	}
 	p.next()
 
 	var val any
-	switch p.cur.Type {
-	case tokString:
+	switch p.cur.Op {
+	case OpString:
 		val = p.input[p.cur.Start:p.cur.End]
-	case tokNumber:
+	case OpNumber:
 		num, err := p.parseNumber()
 		if err != nil {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: tokNumber}
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpNumber}
 		}
 		val = num
-	case tokBool:
+	case OpBool:
 		boolean, err := strconv.ParseBool(p.input[p.cur.Start:p.cur.End])
 		if err != nil {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: tokBool}
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpBool}
 		}
 		val = boolean
 
 	// value with cast: uint8(10)
-	case tokIdent:
+	case OpIdent:
 		typeName := p.input[p.cur.Start:p.cur.End]
 		p.next()
-		if p.cur.Type != tokLParen {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: tokLParen}
+		if p.cur.Op != OpLParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpLParen}
 		}
 		p.next()
 
-		if p.cur.Type == tokNumber {
+		if p.cur.Op == OpNumber {
 			num, err := p.parseNumber()
 			if err != nil {
-				return nil, ErrUnexpectedToken{token: p.cur, expected: tokNumber}
+				return nil, ErrUnexpectedToken{token: p.cur, expected: OpNumber}
 			}
 			val, err = castValue(typeName, num)
 			if err != nil {
@@ -168,29 +273,20 @@ func (p *parser) parseCondition() (Query32, error) {
 			p.next()
 		}
 
-		if p.cur.Type != tokRParen {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: tokRParen}
+		if p.cur.Op != OpRParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpRParen}
 		}
 	default:
-		return nil, ErrUnexpectedToken{token: p.cur, expected: tokString}
+		return nil, ErrUnexpectedToken{token: p.cur, expected: OpString}
 	}
 	p.next()
 
-	switch relTokenType {
-	case tokNeq:
-		return NotEq(field, val), nil
-	case tokLess:
-		return Lt(field, val), nil
-	case tokLessEq:
-		return Le(field, val), nil
-	case tokGreater:
-		return Gt(field, val), nil
-	case tokGreaterEq:
-		return Ge(field, val), nil
-	default:
-		// must be Eq, the evaluation was already
-		return Eq(field, val), nil
+	// set the value for the TermExpr
+	termExpr.Value = val
+	if tokenOp == OpNeq {
+		return NotExpr{Child: termExpr}, nil
 	}
+	return termExpr, nil
 }
 
 func castValue(typeName string, val any) (any, error) {
@@ -314,68 +410,29 @@ func (p *parser) parseNumber() (any, error) {
 	return v, nil
 }
 
-// Optimize rewrites the AST to eliminate unnecessary nesting and function calls.
-// Apply the AST transformations!
-// optimizedAst := Optimize(ast)
-//
-// return optimizedAst, nil
-// func Optimize(f Filter) Filter {
-// 	switch node := f.(type) {
-//
-// 	case *And:
-// 		node.Left = Optimize(node.Left)
-// 		node.Right = Optimize(node.Right)
-// 		return node
-//
-// 	case *Or:
-// 		node.Left = Optimize(node.Left)
-// 		node.Right = Optimize(node.Right)
-// 		return node
-//
-// 	case *Not:
-// 		// 1. Optimize the inner expression first
-// 		inner := Optimize(node.Expr)
-//
-// 		// 2. Apply our Transformation Rules
-// 		switch in := inner.(type) {
-// 		case *Eq:
-// 			// Rule: NOT (A = B)  -->  A != B
-// 			return &Neq{Field: in.Field, Value: in.Value}
-//
-// 		case *Neq:
-// 			// Rule: NOT (A != B)  -->  A = B
-// 			return &Eq{Field: in.Field, Value: in.Value}
-//
-// 		case *Not:
-// 			// Rule: Double Negation: NOT (NOT A) --> A
-// 			return in.Expr
-//
-// 		// --- NEW: De Morgan's Laws ---
-// 		case *And:
-// 			// Rule: NOT (A AND B) --> (NOT A) OR (NOT B)
-// 			newOr := &Or{
-// 				Left:  &Not{Expr: in.Left},
-// 				Right: &Not{Expr: in.Right},
-// 			}
-// 			// Recursively optimize the new structure to collapse the NOTs!
-// 			return Optimize(newOr)
-//
-// 		case *Or:
-// 			// Rule: NOT (A OR B) --> (NOT A) AND (NOT B)
-// 			newAnd := &And{
-// 				Left:  &Not{Expr: in.Left},
-// 				Right: &Not{Expr: in.Right},
-// 			}
-// 			// Recursively optimize the new structure to collapse the NOTs!
-// 			return Optimize(newAnd)
-// 		// -----------------------------
-//
-// 		default:
-// 			node.Expr = inner
-// 			return node
-// 		}
-//
-// 	default:
-// 		return f
-// 	}
-// }
+type ErrUnexpectedToken struct {
+	token    token
+	expected Op
+}
+
+func (e ErrUnexpectedToken) Error() string {
+	if e.expected == OpUndefined {
+		return fmt.Sprintf(
+			"unexpected token: %q [%d:%d]",
+			e.token.Op,
+			e.token.Start,
+			e.token.End,
+		)
+	}
+	return fmt.Sprintf(
+		"unexpected token: %q, expected: %q [%d:%d]",
+		e.token.Op,
+		e.expected,
+		e.token.Start,
+		e.token.End,
+	)
+}
+
+type ErrCast struct{ msg string }
+
+func (e ErrCast) Error() string { return fmt.Sprintf("cast err: %s", e.msg) }

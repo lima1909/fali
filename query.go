@@ -1,16 +1,5 @@
 package main
 
-type Relation int8
-
-const (
-	Equal = 1 << iota
-	Less
-	LessEqual
-	Greater
-	GreaterEqual
-	StartsWith // only works with string in the moment
-)
-
 // Query32 supports only uint32 List-Indices
 type Query32 = Query[uint32]
 
@@ -35,35 +24,35 @@ func all[LI Value]() Query[LI] {
 }
 
 //go:inline
-func rel[LI Value](fieldName string, relation Relation, val any) Query[LI] {
+func rel[LI Value](fieldName string, op Op, val any) Query[LI] {
 	return func(l LookupByName[LI], _ *BitSet[LI]) (_ *BitSet[LI], canMutate bool, _ error) {
 		lookup, err := l(fieldName)
 		if err != nil {
 			return nil, false, err
 		}
 
-		bs, err := lookup.Get(relation, val)
+		bs, err := lookup.Get(op, val)
 		return bs, false, err
 	}
 }
 
 // ID id = val
-func ID(val any) Query32 { return rel[uint32]("", Equal, val) }
+func ID(val any) Query32 { return rel[uint32](IDIndexFieldName, OpEq, val) }
 
 // Eq fieldName = val
-func Eq(fieldName string, val any) Query32 { return rel[uint32](fieldName, Equal, val) }
+func Eq(fieldName string, val any) Query32 { return rel[uint32](fieldName, OpEq, val) }
 
 // Lt Less fieldName < val
-func Lt(fieldName string, val any) Query32 { return rel[uint32](fieldName, Less, val) }
+func Lt(fieldName string, val any) Query32 { return rel[uint32](fieldName, OpLt, val) }
 
 // Le Less Equal fieldName <= val
-func Le(fieldName string, val any) Query32 { return rel[uint32](fieldName, LessEqual, val) }
+func Le(fieldName string, val any) Query32 { return rel[uint32](fieldName, OpLe, val) }
 
 // Gt Greater fieldName > val
-func Gt(fieldName string, val any) Query32 { return rel[uint32](fieldName, Greater, val) }
+func Gt(fieldName string, val any) Query32 { return rel[uint32](fieldName, OpGt, val) }
 
 // Ge Greater Equal fieldName >= val
-func Ge(fieldName string, val any) Query32 { return rel[uint32](fieldName, GreaterEqual, val) }
+func Ge(fieldName string, val any) Query32 { return rel[uint32](fieldName, OpGe, val) }
 
 // IsNil is a Query which checks for a given type the nil value
 func IsNil[V any](fieldName string) Query32 { return isNil[V, uint32](fieldName) }
@@ -76,7 +65,7 @@ func isNil[V any, LI Value](fieldName string) Query[LI] {
 			return nil, false, err
 		}
 
-		bs, err := lookup.Get(Equal, (*V)(nil))
+		bs, err := lookup.Get(OpEq, (*V)(nil))
 		return bs, false, err
 	}
 }
@@ -97,7 +86,7 @@ func in[LI Value](fieldName string, vals ...any) Query[LI] {
 			return nil, false, err
 		}
 
-		bs, err := lookup.Get(Equal, vals[0])
+		bs, err := lookup.Get(OpEq, vals[0])
 		if err != nil {
 			return nil, false, err
 		}
@@ -108,7 +97,7 @@ func in[LI Value](fieldName string, vals ...any) Query[LI] {
 
 		bs = bs.Copy()
 		for _, val := range vals[1:] {
-			bsGet, err := lookup.Get(Equal, val)
+			bsGet, err := lookup.Get(OpEq, val)
 			if err != nil {
 				return nil, false, err
 			}
@@ -130,7 +119,7 @@ func notEq[LI Value](fieldName string, val any) Query[LI] {
 			return nil, false, err
 		}
 
-		exclude, err := lookup.Get(Equal, val)
+		exclude, err := lookup.Get(OpEq, val)
 		if err != nil {
 			return nil, false, err
 		}
@@ -163,7 +152,9 @@ func Not[LI Value](q Query[LI]) Query[LI] {
 }
 
 // Eq fieldName = val
-func WithPrefix(fieldName string, val string) Query32 { return rel[uint32](fieldName, StartsWith, val) }
+func WithPrefix(fieldName string, val string) Query32 {
+	return rel[uint32](fieldName, OpStartsWith, val)
+}
 
 // And combines 2 or more queries with an logical And
 func And[LI Value](a Query[LI], b Query[LI], other ...Query[LI]) Query[LI] {
@@ -239,6 +230,10 @@ func AndNot[LI Value](base Query[LI], sub Query[LI]) Query[LI] {
 		}
 
 		result, err = ensureMutable(result, canMutate, nil)
+		if err != nil {
+			return nil, false, err
+		}
+
 		result.AndNot(exclude)
 
 		return result, true, nil

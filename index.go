@@ -7,6 +7,8 @@ import (
 	"unsafe"
 )
 
+const IDIndexFieldName = "id"
+
 // fieldIndexMap maps a given field name to an Index
 type indexMap[OBJ any, ID comparable] struct {
 	idIndex idIndex[OBJ, ID]
@@ -24,7 +26,7 @@ func newIndexMap[OBJ any, ID comparable](idIndex idIndex[OBJ, ID]) indexMap[OBJ,
 
 // LookupByName finds the Lookup by a given field-name
 func (i indexMap[OBJ, ID]) LookupByName(fieldName string) (Lookup32, error) {
-	if fieldName == "" {
+	if fieldName == IDIndexFieldName {
 		if i.idIndex == nil {
 			return nil, ErrNoIdIndexDefined{}
 		}
@@ -127,13 +129,13 @@ func (mi *idMapIndex[OBJ, ID]) GetID(item *OBJ) (ID, int, error) {
 	return null, 0, ErrValueNotFound{id}
 }
 
-func (mi *idMapIndex[OBJ, ID]) Get(relation Relation, value any) (*BitSet[uint32], error) {
+func (mi *idMapIndex[OBJ, ID]) Get(op Op, value any) (*BitSet[uint32], error) {
 	if _, ok := value.(ID); !ok {
 		return nil, ErrInvalidIndexValue[ID]{value}
 	}
 
-	if relation != Equal {
-		return nil, ErrInvalidRelation{relation}
+	if op != OpEq {
+		return nil, ErrInvalidOperation{op}
 	}
 
 	idx, err := mi.GetIndex(value.(ID))
@@ -165,7 +167,7 @@ type Lookup32 = Lookup[uint32]
 
 // Lookup returns the BitSet or an error by a given Relation and Value
 type Lookup[LI Value] interface {
-	Get(Relation, any) (*BitSet[LI], error)
+	Get(Op, any) (*BitSet[LI], error)
 }
 
 // FromField is a function, which returns a value from an given object.
@@ -262,13 +264,13 @@ func (mi *MapIndex[OBJ, V, LI]) UnSet(obj *OBJ, lidx LI) {
 	}
 }
 
-func (mi *MapIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI], error) {
+func (mi *MapIndex[OBJ, V, LI]) Get(op Op, value any) (*BitSet[LI], error) {
 	if _, ok := value.(V); !ok {
 		return nil, ErrInvalidIndexValue[V]{value}
 	}
 
-	if relation != Equal {
-		return nil, ErrInvalidRelation{relation}
+	if op != OpEq {
+		return nil, ErrInvalidOperation{op}
 	}
 
 	bs, found := mi.data[value]
@@ -312,46 +314,46 @@ func (si *SortedIndex[OBJ, V, LI]) UnSet(obj *OBJ, lidx LI) {
 	}
 }
 
-func (si *SortedIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI], error) {
+func (si *SortedIndex[OBJ, V, LI]) Get(op Op, value any) (*BitSet[LI], error) {
 	if _, ok := value.(V); !ok {
 		return nil, ErrInvalidIndexValue[V]{value}
 	}
 
-	switch relation {
-	case Equal:
+	switch op {
+	case OpEq:
 		if bs, found := si.skipList.Get(value.(V)); found {
 			return bs, nil
 		}
 		return NewBitSet[LI](), nil
-	case Less:
+	case OpLt:
 		result := NewBitSet[LI]()
 		si.skipList.Less(value.(V), func(v V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})
 		return result, nil
-	case LessEqual:
+	case OpLe:
 		result := NewBitSet[LI]()
 		si.skipList.LessEqual(value.(V), func(_ V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})
 		return result, nil
-	case Greater:
+	case OpGt:
 		result := NewBitSet[LI]()
 		si.skipList.Greater(value.(V), func(v V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})
 		return result, nil
-	case GreaterEqual:
+	case OpGe:
 		result := NewBitSet[LI]()
 		si.skipList.GreaterEqual(value.(V), func(_ V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})
 		return result, nil
-	case StartsWith:
+	case OpStartsWith:
 		if _, ok := value.(string); !ok {
 			return nil, ErrInvalidIndexValue[string]{value}
 		}
@@ -363,6 +365,6 @@ func (si *SortedIndex[OBJ, V, LI]) Get(relation Relation, value any) (*BitSet[LI
 		})
 		return result, nil
 	default:
-		return nil, ErrInvalidRelation{relation}
+		return nil, ErrInvalidOperation{op}
 	}
 }

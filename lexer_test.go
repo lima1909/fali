@@ -7,126 +7,126 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLexer_OneToken(t *testing.T) {
+func TestLexer_OneOpen(t *testing.T) {
 
 	tests := []struct {
 		query    string
-		expected tokenType
+		expected Op
 	}{
-		{query: `true`, expected: tokBool},
-		{query: `tRue`, expected: tokBool},
-		{query: `fALse`, expected: tokBool},
-		{query: `4.2`, expected: tokNumber},
-		{query: `7`, expected: tokNumber},
-		{query: `0.9`, expected: tokNumber},
-		{query: `-9`, expected: tokNumber},
-		{query: `-0.9`, expected: tokNumber},
-		{query: `"false"`, expected: tokString},
-		{query: `Or`, expected: tokOr},
-		{query: `aND`, expected: tokAnd},
-		{query: ` noT `, expected: tokNot},
-		{query: ` = `, expected: tokEq},
-		{query: ` != `, expected: tokNeq},
-		{query: ` < `, expected: tokLess},
-		{query: `<=`, expected: tokLessEq},
-		{query: ` > `, expected: tokGreater},
-		{query: `>=`, expected: tokGreaterEq},
-		{query: `(`, expected: tokLParen},
-		{query: `)`, expected: tokRParen},
+		{query: `true`, expected: OpBool},
+		{query: `tRue`, expected: OpBool},
+		{query: `fALse`, expected: OpBool},
+		{query: `4.2`, expected: OpNumber},
+		{query: `7`, expected: OpNumber},
+		{query: `0.9`, expected: OpNumber},
+		{query: `-9`, expected: OpNumber},
+		{query: `-0.9`, expected: OpNumber},
+		{query: `"false"`, expected: OpString},
+		{query: `Or`, expected: OpOr},
+		{query: `aND`, expected: OpAnd},
+		{query: ` noT `, expected: OpNot},
+		{query: ` = `, expected: OpEq},
+		{query: ` != `, expected: OpNeq},
+		{query: ` < `, expected: OpLt},
+		{query: `<=`, expected: OpLe},
+		{query: ` > `, expected: OpGt},
+		{query: `>=`, expected: OpGe},
+		{query: `(`, expected: OpLParen},
+		{query: `)`, expected: OpRParen},
 
-		{query: `startswith`, expected: tokIdent},
+		{query: `startswith`, expected: OpIdent},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
 			lex := lexer{input: tt.query, pos: 0}
-			lexerToken := lex.nextToken().Type
+			lexerOpen := lex.nextToken().Op
 			assert.Equal(
 				t,
 				tt.expected,
-				lexerToken,
-				fmt.Sprintf("%s != %s", tt.expected, lexerToken),
+				lexerOpen,
+				fmt.Sprintf("%s != %s", tt.expected, lexerOpen),
 			)
 		})
 	}
 }
 
-func TestLexer_ManyToken(t *testing.T) {
+func TestLexer_ManyOpen(t *testing.T) {
 
 	tests := []struct {
 		query    string
-		expected []tokenType
+		expected []Op
 	}{
-		{query: `ok = true`, expected: []tokenType{
-			tokIdent,
-			tokEq,
-			tokBool,
+		{query: `ok = true`, expected: []Op{
+			OpIdent,
+			OpEq,
+			OpBool,
 		}},
-		{query: `num = -5`, expected: []tokenType{
-			tokIdent,
-			tokEq,
-			tokNumber,
+		{query: `num = -5`, expected: []Op{
+			OpIdent,
+			OpEq,
+			OpNumber,
 		}},
-		{query: `num = -5.3`, expected: []tokenType{
-			tokIdent,
-			tokEq,
-			tokNumber,
+		{query: `num = -5.3`, expected: []Op{
+			OpIdent,
+			OpEq,
+			OpNumber,
 		}},
-		{query: `float32(-5)`, expected: []tokenType{
-			tokIdent,
-			tokLParen,
-			tokNumber,
-			tokRParen,
+		{query: `float32(-5)`, expected: []Op{
+			OpIdent,
+			OpLParen,
+			OpNumber,
+			OpRParen,
 		}},
-		{query: `not(ok = true)`, expected: []tokenType{
-			tokNot,
-			tokLParen,
-			tokIdent,
-			tokEq,
-			tokBool,
-			tokRParen,
+		{query: `not(ok = true)`, expected: []Op{
+			OpNot,
+			OpLParen,
+			OpIdent,
+			OpEq,
+			OpBool,
+			OpRParen,
 		}},
-		{query: `ok != true`, expected: []tokenType{
-			tokIdent,
-			tokNeq,
-			tokBool,
+		{query: `ok != true`, expected: []Op{
+			OpIdent,
+			OpNeq,
+			OpBool,
 		}},
-		{query: `name = "Inge" and age = 3`, expected: []tokenType{
-			tokIdent,
-			tokEq,
-			tokString,
-			tokAnd,
-			tokIdent,
-			tokEq,
-			tokNumber,
+		{query: `name = "Inge" and age = 3`, expected: []Op{
+			OpIdent,
+			OpEq,
+			OpString,
+			OpAnd,
+			OpIdent,
+			OpEq,
+			OpNumber,
 		}},
-		{query: `name="Inge" or age=3`, expected: []tokenType{
-			tokIdent,
-			tokEq,
-			tokString,
-			tokOr,
-			tokIdent,
-			tokEq,
-			tokNumber,
+		{query: `name="Inge" or age=3`, expected: []Op{
+			OpIdent,
+			OpEq,
+			OpString,
+			OpOr,
+			OpIdent,
+			OpEq,
+			OpNumber,
 		}},
 
-		{query: `name startswith "Ma"`, expected: []tokenType{
-			tokIdent,
-			tokIdent,
-			tokString,
+		{query: `name startswith "Ma"`, expected: []Op{
+			OpIdent,
+			OpIdent,
+			OpString,
 		}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
 			lex := lexer{input: tt.query, pos: 0}
-			for _, token := range tt.expected {
-				lexerToken := lex.nextToken().Type
+			for _, Open := range tt.expected {
+				lexerOpen := lex.nextToken().Op
 				assert.Equal(
 					t,
-					token,
-					lexerToken,
-					fmt.Sprintf("%s != %s", token, lexerToken),
+					Open,
+					lexerOpen,
+					fmt.Sprintf("%s != %s", Open, lexerOpen),
 				)
 			}
 		})
@@ -137,24 +137,24 @@ func TestLexer_Invalid(t *testing.T) {
 
 	tests := []struct {
 		query    string
-		expected []tokenType
+		expected []Op
 	}{
-		{query: `3.3.1`, expected: []tokenType{
-			tokNumber,
-			tokEOF,
+		{query: `3.3.1`, expected: []Op{
+			OpNumber,
+			OpEOF,
 		}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
 			lex := lexer{input: tt.query, pos: 0}
-			for _, token := range tt.expected {
-				lexerToken := lex.nextToken().Type
+			for _, Open := range tt.expected {
+				lexerOpen := lex.nextToken().Op
 				assert.Equal(
 					t,
-					token,
-					lexerToken,
-					fmt.Sprintf("%s != %s", token, lexerToken),
+					Open,
+					lexerOpen,
+					fmt.Sprintf("%s != %s", Open, lexerOpen),
 				)
 			}
 		})

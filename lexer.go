@@ -2,79 +2,91 @@ package main
 
 import "fmt"
 
-type tokenType uint8
+type Op uint16
 
 const (
-	tokUndefined tokenType = iota
-	// end of file
-	tokEOF
-	// ident
-	tokIdent
-	// datatypes
-	tokString
-	tokNumber
-	tokBool
-	// relations
-	tokEq
-	tokNeq
-	tokLess
-	tokLessEq
-	tokGreater
-	tokGreaterEq
-	// logical combinations
-	tokAnd
-	tokOr
-	tokNot
-	// parentheses
-	tokLParen
-	tokRParen
+	opCategoryMaskOp = 0xFF00
+
+	// Categories (High Bits)
+	opStructural = 0x0400
+	opLogical    = 0x0200
+	opRelational = 0x0100
+
+	// Structural & Literals
+	OpUndefined Op = opStructural | iota
+	OpEOF
+	OpLParen
+	OpRParen
+	OpIdent
+	OpString
+	OpNumber
+	OpBool
+
+	// Logical
+	OpAnd Op = opLogical | iota
+	OpOr
+	OpNot
+
+	// Relation
+	OpEq         Op = opRelational | (1 << 0)
+	OpNeq           = opRelational | (1 << 1)
+	OpLt            = opRelational | (1 << 2)
+	OpLe            = opRelational | (1 << 3)
+	OpGt            = opRelational | (1 << 4)
+	OpGe            = opRelational | (1 << 5)
+	OpStartsWith    = opRelational | (1 << 6)
 )
 
-func (t tokenType) String() string {
-	switch t {
-	case tokUndefined:
+func (o Op) IsRelational() bool { return o&opCategoryMaskOp == opRelational }
+func (o Op) IsLogical() bool    { return o&opCategoryMaskOp == opLogical }
+
+func (o Op) String() string {
+	switch o {
+	case OpUndefined:
 		return "undefined"
-	case tokEOF:
+	case OpEOF:
 		return "EOF"
-	case tokIdent:
+	case OpIdent:
 		return "indent"
-	case tokString:
+	case OpString:
 		return "string"
-	case tokNumber:
+	case OpNumber:
 		return "number"
-	case tokBool:
+	case OpBool:
 		return "bool"
-	case tokEq:
+	case OpEq:
 		return "="
-	case tokNeq:
+	case OpNeq:
 		return "!="
-	case tokLess:
+	case OpLt:
 		return "<"
-	case tokLessEq:
+	case OpLe:
 		return "<="
-	case tokGreater:
+	case OpGt:
 		return ">"
-	case tokGreaterEq:
+	case OpGe:
 		return ">="
-	case tokAnd:
+	case OpStartsWith:
+		return "startswith"
+	case OpAnd:
 		return "and"
-	case tokOr:
+	case OpOr:
 		return "or"
-	case tokNot:
+	case OpNot:
 		return "not"
-	case tokLParen:
+	case OpLParen:
 		return "("
-	case tokRParen:
+	case OpRParen:
 		return ")"
 	default:
-		return fmt.Sprintf("UNKNOWN: %d", t)
+		return fmt.Sprintf("UNKNOWN: %d", o)
 	}
 }
 
 type token struct {
 	Start int
 	End   int
-	Type  tokenType
+	Op    Op
 }
 
 type lexer struct {
@@ -94,7 +106,7 @@ func (l *lexer) nextToken() token {
 	}
 
 	if l.pos >= len(l.input) {
-		return token{Type: tokEOF, Start: l.pos, End: l.pos}
+		return token{Op: OpEOF, Start: l.pos, End: l.pos}
 	}
 
 	ch := l.input[l.pos]
@@ -103,22 +115,22 @@ func (l *lexer) nextToken() token {
 	case ch == '(':
 		start := l.pos
 		l.pos++
-		return token{Type: tokLParen, Start: start, End: l.pos}
+		return token{Op: OpLParen, Start: start, End: l.pos}
 	case ch == ')':
 		start := l.pos
 		l.pos++
-		return token{Type: tokRParen, Start: start, End: l.pos}
+		return token{Op: OpRParen, Start: start, End: l.pos}
 	case ch == '=':
 		start := l.pos
 		l.pos++
-		return token{Type: tokEq, Start: start, End: l.pos}
+		return token{Op: OpEq, Start: start, End: l.pos}
 
 	case ch == '!':
 		start := l.pos
 		// Check if the next byte exists and is '='
 		if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
 			l.pos += 2 // Consume both '!' and '='
-			return token{Type: tokNeq, Start: start, End: l.pos}
+			return token{Op: OpNeq, Start: start, End: l.pos}
 		}
 		// Optional: Handle a lone '!' if you want a NOT operator later
 		l.pos++
@@ -126,18 +138,18 @@ func (l *lexer) nextToken() token {
 		start := l.pos
 		if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
 			l.pos += 2
-			return token{Type: tokLessEq, Start: start, End: l.pos}
+			return token{Op: OpLe, Start: start, End: l.pos}
 		}
 		l.pos++
-		return token{Type: tokLess, Start: start, End: l.pos}
+		return token{Op: OpLt, Start: start, End: l.pos}
 	case ch == '>':
 		start := l.pos
 		if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
 			l.pos += 2
-			return token{Type: tokGreaterEq, Start: start, End: l.pos}
+			return token{Op: OpGe, Start: start, End: l.pos}
 		}
 		l.pos++
-		return token{Type: tokGreater, Start: start, End: l.pos}
+		return token{Op: OpGt, Start: start, End: l.pos}
 	case ch == '"', ch == '\'':
 		return l.readString(ch)
 	case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_':
@@ -147,7 +159,7 @@ func (l *lexer) nextToken() token {
 	}
 
 	l.pos++
-	return token{Type: tokEOF, Start: l.pos, End: l.pos}
+	return token{Op: OpEOF, Start: l.pos, End: l.pos}
 }
 
 // readIdentOrKeyword checks if the word is AND / OR without allocating memory
@@ -172,14 +184,14 @@ func (l *lexer) readBoolOrIdentOrKeyword() token {
 	switch length {
 	case 2:
 		if (b[0] == 'o' || b[0] == 'O') && (b[1] == 'r' || b[1] == 'R') {
-			return token{Type: tokOr, Start: start, End: l.pos}
+			return token{Op: OpOr, Start: start, End: l.pos}
 		}
 	case 3:
 		if (b[0] == 'a' || b[0] == 'A') && (b[1] == 'n' || b[1] == 'N') && (b[2] == 'd' || b[2] == 'D') {
-			return token{Type: tokAnd, Start: start, End: l.pos}
+			return token{Op: OpAnd, Start: start, End: l.pos}
 		}
 		if (b[0] == 'n' || b[0] == 'N') && (b[1] == 'o' || b[1] == 'O') && (b[2] == 't' || b[2] == 'T') {
-			return token{Type: tokNot, Start: start, End: l.pos}
+			return token{Op: OpNot, Start: start, End: l.pos}
 		}
 	case 4:
 		// check for "true" (Case Insensitive)
@@ -187,7 +199,7 @@ func (l *lexer) readBoolOrIdentOrKeyword() token {
 			(b[1] == 'r' || b[1] == 'R') &&
 			(b[2] == 'u' || b[2] == 'U') &&
 			(b[3] == 'e' || b[3] == 'E') {
-			return token{Type: tokBool, Start: start, End: l.pos}
+			return token{Op: OpBool, Start: start, End: l.pos}
 		}
 	case 5:
 		// check for "false" (Case Insensitive)
@@ -196,12 +208,13 @@ func (l *lexer) readBoolOrIdentOrKeyword() token {
 			(b[2] == 'l' || b[2] == 'L') &&
 			(b[3] == 's' || b[3] == 'S') &&
 			(b[4] == 'e' || b[4] == 'E') {
-			return token{Type: tokBool, Start: start, End: l.pos}
+			return token{Op: OpBool, Start: start, End: l.pos}
 		}
 	}
 
 	// If it didn't match any of the keywords, it's just a normal identifier
-	return token{Type: tokIdent, Start: start, End: l.pos}
+	// return token{Type: tokIdent, Start: start, End: l.pos}
+	return token{Op: OpIdent, Start: start, End: l.pos}
 }
 
 func (l *lexer) readNumber() token {
@@ -227,7 +240,7 @@ func (l *lexer) readNumber() token {
 		}
 	}
 
-	return token{Type: tokNumber, Start: start, End: l.pos}
+	return token{Op: OpNumber, Start: start, End: l.pos}
 }
 
 func (l *lexer) readString(quote byte) token {
@@ -240,5 +253,5 @@ func (l *lexer) readString(quote byte) token {
 	if l.pos < len(l.input) {
 		l.pos++ // Skip close quote
 	}
-	return token{Type: tokString, Start: start, End: end}
+	return token{Op: OpString, Start: start, End: end}
 }

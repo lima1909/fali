@@ -17,10 +17,10 @@ func (e ErrInvalidIndexValue[V]) Error() string {
 	return fmt.Sprintf("invalid index value type: %T, expected type: %v", e.value, reflect.TypeFor[V]())
 }
 
-type ErrInvalidRelation struct{ relation Relation }
+type ErrInvalidOperation struct{ op Op }
 
-func (e ErrInvalidRelation) Error() string {
-	return fmt.Sprintf("this index doesn't support this relation: %#v", e.relation)
+func (e ErrInvalidOperation) Error() string {
+	return fmt.Sprintf("this index doesn't support this operation: %#v", e.op)
 }
 
 type ErrValueNotFound struct{ value any }

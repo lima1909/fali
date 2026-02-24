@@ -8,6 +8,7 @@ import (
 )
 
 type User struct {
+	ID    int64
 	name  string
 	role  string
 	ok    bool
@@ -20,27 +21,27 @@ func (u *User) Ok() bool       { return u.ok }
 func (u *User) Price() float64 { return u.price }
 
 func TestParser_Base(t *testing.T) {
-	user := User{name: "Alice", role: "admin", ok: false, price: 1.2}
-
-	indexMap := newIndexMap[User, struct{}](nil)
+	indexMap := newIndexMap(newIDMapIndex(func(u *User) int64 { return u.ID }))
+	indexMap.idIndex.Set(&User{ID: 40}, 0)
+	indexMap.idIndex.Set(&User{ID: 42}, 1)
 	indexMap.index["name"] = NewSortedIndex((*User).Name)
-	indexMap.index["name"].Set(&user, 1)
+	indexMap.index["name"].Set(&User{name: "Alice"}, 1)
 	indexMap.index["role"] = NewSortedIndex((*User).Role)
-	indexMap.index["role"].Set(&user, 1)
+	indexMap.index["role"].Set(&User{role: "admin"}, 1)
 	indexMap.index["price"] = NewSortedIndex((*User).Price)
 	indexMap.index["price"].Set(&User{price: 3.0}, 0)
-	indexMap.index["price"].Set(&user, 1)
+	indexMap.index["price"].Set(&User{price: 1.2}, 1)
 	indexMap.index["ok"] = NewMapIndex((*User).Ok)
 	indexMap.index["ok"].Set(&User{ok: true}, 0)
-	indexMap.index["ok"].Set(&user, 1)
+	indexMap.index["ok"].Set(&User{ok: false}, 1)
 	indexMap.allIDs.Set(0)
 	indexMap.allIDs.Set(1)
 
-	// the rule: AND before OR
 	tests := []struct {
 		query    string
 		expected []uint32
 	}{
+		{query: `id = 42`, expected: []uint32{1}},
 		{query: `role="admin"`, expected: []uint32{1}},
 		{query: `price = 1.2`, expected: []uint32{1}},
 		{query: `price = 4.2`, expected: []uint32{}},
@@ -52,6 +53,20 @@ func TestParser_Base(t *testing.T) {
 		{query: `price > 1.2`, expected: []uint32{0}},
 		{query: `price >= 1.2`, expected: []uint32{0, 1}},
 
+		// RULE: Not(Not(A)) -> A (Double Negative)
+		{query: `NOT(NOT(role = "admin"))`, expected: []uint32{1}},
+		// RULE: NOT (A != B)  -->  A = B
+		{query: `NOT(role != "admin")`, expected: []uint32{1}},
+		// RULE: NOT (A > B) --> A <= B
+		{query: `Not(price > 1.2)`, expected: []uint32{1}},
+		// RULE: NOT (A >= B) --> A < B
+		{query: `Not(price >= 1.3)`, expected: []uint32{1}},
+		// RULE: NOT (A < B) --> A >= B
+		{query: `Not(price < 3.0)`, expected: []uint32{0}},
+		// RULE: NOT (A <= B) --> A > B
+		{query: `Not(price <= 2.2)`, expected: []uint32{0}},
+
+		{query: `id = 42 and role = "admin"`, expected: []uint32{1}},
 		{query: `ok = true or price = 0.0`, expected: []uint32{0}},
 		{query: `role = "admin" AND price = 9.9`, expected: []uint32{}},
 		{query: `role = "admin" OR price = 9.9`, expected: []uint32{1}},
@@ -153,54 +168,54 @@ func TestParser_Cast(t *testing.T) {
 func TestParser_Error(t *testing.T) {
 
 	tests := []struct {
-		query              string
-		expected_tokentype tokenType
-		err_tokentpye      tokenType
+		query       string
+		expected_op Op
+		err_op      Op
 	}{
 		{
-			query:              ``,
-			expected_tokentype: tokIdent,
-			err_tokentpye:      tokEOF,
+			query:       ``,
+			expected_op: OpIdent,
+			err_op:      OpEOF,
 		},
 		{
-			query:              `role`,
-			expected_tokentype: tokEq,
-			err_tokentpye:      tokEOF,
+			query:       `role`,
+			expected_op: OpEq,
+			err_op:      OpEOF,
 		},
 		{
-			query:              `role ~`,
-			expected_tokentype: tokEq,
-			err_tokentpye:      tokEOF,
+			query:       `role ~`,
+			expected_op: OpEq,
+			err_op:      OpEOF,
 		},
 		{
-			query:              `false`,
-			expected_tokentype: tokIdent,
-			err_tokentpye:      tokBool,
+			query:       `false`,
+			expected_op: OpIdent,
+			err_op:      OpBool,
 		},
 		{
-			query:              `role = `,
-			expected_tokentype: tokString,
-			err_tokentpye:      tokEOF,
+			query:       `role = `,
+			expected_op: OpString,
+			err_op:      OpEOF,
 		},
 		{
-			query:              `(role = 3`,
-			expected_tokentype: tokRParen,
-			err_tokentpye:      tokEOF,
+			query:       `(role = 3`,
+			expected_op: OpRParen,
+			err_op:      OpEOF,
 		},
 		{
-			query:              `role = 3   and `,
-			expected_tokentype: tokIdent,
-			err_tokentpye:      tokEOF,
+			query:       `role = 3   and `,
+			expected_op: OpIdent,
+			err_op:      OpEOF,
 		},
 		{
-			query:              `role = 3   and 5 `,
-			expected_tokentype: tokIdent,
-			err_tokentpye:      tokNumber,
+			query:       `role = 3   and 5 `,
+			expected_op: OpIdent,
+			err_op:      OpNumber,
 		},
 		{
-			query:              `not 3 `,
-			expected_tokentype: tokIdent,
-			err_tokentpye:      tokNumber,
+			query:       `not 3 `,
+			expected_op: OpIdent,
+			err_op:      OpNumber,
 		},
 	}
 
@@ -209,8 +224,8 @@ func TestParser_Error(t *testing.T) {
 			_, err := Parse(tt.query)
 			var parseErr ErrUnexpectedToken
 			assert.True(t, errors.As(err, &parseErr))
-			assert.Equal(t, tt.err_tokentpye, parseErr.token.Type)
-			assert.Equal(t, tt.expected_tokentype, parseErr.expected)
+			assert.Equal(t, tt.err_op, parseErr.token.Op)
+			assert.Equal(t, tt.expected_op, parseErr.expected)
 		})
 	}
 }

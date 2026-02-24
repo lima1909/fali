@@ -29,6 +29,9 @@ func BenchmarkQueryStr(b *testing.B) {
 
 	// Sprintf is expensive, so we only test with 250_000 datasets
 	ds := 3_000_000
+
+	list := make([]person, 0, ds)
+
 	il := NewIndexList[person]()
 	err := il.CreateIndex("name", NewSortedIndex(FromName[person, string]("Name")))
 	assert.NoError(b, err)
@@ -46,18 +49,50 @@ func BenchmarkQueryStr(b *testing.B) {
 			Name: names[n],
 			Age:  minV + rand.IntN(maxV-minV+1),
 		})
+
+		list = append(list, person{
+			Name: names[n],
+			Age:  minV + rand.IntN(maxV-minV+1),
+		})
 	}
 	fmt.Printf("- Count: %d, Time: %s\n", il.Count(), time.Since(start))
 	b.ResetTimer()
 
-	count := 0
-	for b.Loop() {
-		qr, err := il.QueryStr(
-			`name = "Jule" or name = "Magan" or age > int(80)`,
-		)
-		assert.NoError(b, err)
-		count = max(count, qr.Count())
+	bmarks := []struct {
+		name  string
+		bmark func() int
+	}{
+		{
+			name: "IndexList",
+			bmark: func() int {
+				qr, _ := il.QueryStr(
+					`name = "Jule" or name = "Magan" or age > int(80)`,
+				)
+				return qr.Count()
+			},
+		},
+		{
+			name: "List",
+			bmark: func() int {
+				count := 0
+				for _, p := range list {
+					if p.Name == "Jule" || p.Name == "Magan" || p.Age > 80 {
+						count++
+					}
+				}
+				return count
+			},
+		},
 	}
 
-	fmt.Printf("- Max count: %d\n\n", count)
+	for _, bench := range bmarks {
+		b.Run(bench.name, func(b *testing.B) {
+			count := 0
+			for b.Loop() {
+				count = max(count, bench.bmark())
+			}
+			fmt.Printf("---%s: %d \n", bench.name, count)
+
+		})
+	}
 }

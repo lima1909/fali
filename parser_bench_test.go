@@ -10,7 +10,7 @@ func BenchmarkLexer(b *testing.B) {
 
 	for b.Loop() {
 		l := &lexer{input: `role = "admin" OR status = 1 AND deleted = 1`, pos: 0}
-		for l.nextToken().Type != tokEOF {
+		for l.nextToken().Op != OpEOF {
 		}
 	}
 }
