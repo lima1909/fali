@@ -14,6 +14,7 @@ const (
 	ExprAnd
 	ExprAndNot
 	ExprNot
+	ExprBetween
 )
 
 type Expr interface{ kind() ExprKind }
@@ -38,6 +39,14 @@ type TermExpr struct {
 
 func (e TermExpr) kind() ExprKind { return ExprTerm }
 
+type BetweenValue struct {
+	Field            string
+	Min, Max         any
+	MinIncl, MaxIncl bool
+}
+
+func (b BetweenValue) kind() ExprKind { return ExprBetween }
+
 // Parser impl starts
 type parser struct {
 	input string
@@ -55,13 +64,51 @@ func optimize(e Expr) Expr {
 		left := optimize(n.Left)
 		right := optimize(n.Right)
 
-		// RULE: And(A, Not(B)) -> AndNot(A, B)
 		if n.Op == ExprAnd {
+			// RULE: And(A, Not(B)) -> AndNot(A, B)
 			if notNode, ok := right.(NotExpr); ok {
 				return BinaryExpr{Op: ExprAndNot, Left: left, Right: notNode.Child}
 			}
+			// RULE: And(A, Not(B)) -> AndNot(A, B)
 			if notNode, ok := left.(NotExpr); ok {
 				return BinaryExpr{Op: ExprAndNot, Left: right, Right: notNode.Child}
+			}
+
+			// RULE: And(A > X, B < Y) -> BETWEEN(A, B)
+			if lt, okL := left.(TermExpr); okL {
+				if rt, okR := right.(TermExpr); okR {
+					if lt.Field == rt.Field {
+						var min, max any
+						var minInc, maxInc bool
+
+						// Identify Lower Bound
+						if lt.Op == OpGt || lt.Op == OpGe {
+							min, minInc = lt.Value, (lt.Op == OpGe)
+						} else if rt.Op == OpGt || rt.Op == OpGe {
+							min, minInc = rt.Value, (rt.Op == OpGe)
+						}
+
+						// Identify Upper Bound
+						if lt.Op == OpLt || lt.Op == OpLe {
+							max, maxInc = lt.Value, (lt.Op == OpLe)
+						} else if rt.Op == OpLt || rt.Op == OpLe {
+							max, maxInc = rt.Value, (rt.Op == OpLe)
+						}
+
+						// If we found both a min and a max, we have a BETWEEN
+						if min != nil && max != nil {
+							return TermExpr{
+								Field: lt.Field,
+								Op:    OpBetween,
+								Value: BetweenValue{
+									Min: min, Max: max,
+									MinIncl: minInc, MaxIncl: maxInc,
+								},
+							}
+						}
+
+					}
+				}
 			}
 		}
 		return BinaryExpr{Op: n.Op, Left: left, Right: right}
@@ -111,7 +158,7 @@ func optimize(e Expr) Expr {
 func compile(e Expr) Query32 {
 	switch n := e.(type) {
 	case TermExpr:
-		return rel[uint32](n.Field, n.Op, n.Value)
+		return match[uint32](n.Field, n.Op, n.Value)
 
 	case NotExpr:
 		return Not(compile(n.Child))
@@ -129,6 +176,8 @@ func compile(e Expr) Query32 {
 			// This calls the new high-performance AndNot we discussed!
 			return AndNot(left, right)
 		}
+	case *BetweenValue:
+		return matchMany[uint32](n.Field, OpBetween, n.Min, n.Max)
 	}
 
 	return All()
@@ -219,22 +268,53 @@ func (p *parser) parseCondition() (Expr, error) {
 	field := p.input[p.cur.Start:p.cur.End]
 	p.next()
 
-	// is the relation supported
 	tokenOp := p.cur.Op
-	var termExpr TermExpr
+	p.next()
 	switch tokenOp {
 	case OpNeq:
-		// make it later to an Neq, if we have the value
-		termExpr = TermExpr{Field: field, Op: OpEq}
+		val, err := p.parseValue()
+		if err != nil {
+			return nil, err
+		}
+		return NotExpr{Child: TermExpr{Field: field, Op: OpEq, Value: val}}, nil
 	case OpLt, OpLe, OpGt, OpGe, OpEq:
-		termExpr = TermExpr{Field: field, Op: tokenOp}
+		val, err := p.parseValue()
+		if err != nil {
+			return nil, err
+		}
+		return TermExpr{Field: field, Op: tokenOp, Value: val}, nil
+	case OpBetween:
+		if p.cur.Op != OpLParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpLParen}
+		}
+		p.next()
+		min, err := p.parseValue()
+		if err != nil {
+			return nil, err
+		}
+		between := BetweenValue{Field: field, Min: min}
+		if p.cur.Op != OpComma {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpComma}
+		}
+		p.next()
+		max, err := p.parseValue()
+		if err != nil {
+			return nil, err
+		}
+		between.Max = max
+		if p.cur.Op != OpRParen {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpRParen}
+		}
+		p.next()
+		return between, nil
 	// case tokIdent:
 	// maybe relations like startswith
 	default:
 		return nil, ErrUnexpectedToken{token: p.cur, expected: OpEq}
 	}
-	p.next()
+}
 
+func (p *parser) parseValue() (any, error) {
 	var val any
 	switch p.cur.Op {
 	case OpString:
@@ -242,37 +322,31 @@ func (p *parser) parseCondition() (Expr, error) {
 	case OpNumber:
 		num, err := p.parseNumber()
 		if err != nil {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: OpNumber}
+			return nil, err
 		}
 		val = num
 	case OpBool:
 		boolean, err := strconv.ParseBool(p.input[p.cur.Start:p.cur.End])
 		if err != nil {
-			return nil, ErrUnexpectedToken{token: p.cur, expected: OpBool}
+			return nil, err
 		}
 		val = boolean
-
-	// value with cast: uint8(10)
-	case OpIdent:
+	case OpIdent: // Type casting logic: uint8(10)
 		typeName := p.input[p.cur.Start:p.cur.End]
 		p.next()
 		if p.cur.Op != OpLParen {
 			return nil, ErrUnexpectedToken{token: p.cur, expected: OpLParen}
 		}
 		p.next()
-
-		if p.cur.Op == OpNumber {
-			num, err := p.parseNumber()
-			if err != nil {
-				return nil, ErrUnexpectedToken{token: p.cur, expected: OpNumber}
-			}
-			val, err = castValue(typeName, num)
-			if err != nil {
-				return nil, err
-			}
-			p.next()
+		num, err := p.parseNumber()
+		if err != nil {
+			return nil, err
 		}
-
+		val, err = castValue(typeName, num)
+		if err != nil {
+			return nil, err
+		}
+		p.next()
 		if p.cur.Op != OpRParen {
 			return nil, ErrUnexpectedToken{token: p.cur, expected: OpRParen}
 		}
@@ -280,13 +354,50 @@ func (p *parser) parseCondition() (Expr, error) {
 		return nil, ErrUnexpectedToken{token: p.cur, expected: OpString}
 	}
 	p.next()
+	return val, nil
+}
 
-	// set the value for the TermExpr
-	termExpr.Value = val
-	if tokenOp == OpNeq {
-		return NotExpr{Child: termExpr}, nil
+func (p *parser) parseNumber() (any, error) {
+	s := p.input[p.cur.Start:p.cur.End]
+	if len(s) == 0 {
+		return nil, strconv.ErrSyntax
 	}
-	return termExpr, nil
+
+	hasDot := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' {
+			hasDot = true
+			break
+		}
+	}
+
+	if hasDot {
+		return strconv.ParseFloat(s, 64)
+	}
+
+	negative := false
+	i := 0
+	if s[0] == '-' {
+		negative = true
+		i = 1
+		if len(s) == 1 {
+			return nil, strconv.ErrSyntax
+		}
+	}
+
+	var v int64
+	for ; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return nil, strconv.ErrSyntax
+		}
+		v = v*10 + int64(c-'0')
+	}
+
+	if negative {
+		v = -v
+	}
+	return v, nil
 }
 
 func castValue(typeName string, val any) (any, error) {
@@ -365,49 +476,6 @@ func castValue(typeName string, val any) (any, error) {
 	}
 
 	return nil, fmt.Errorf("unsupported type hint: %s", typeName)
-}
-
-func (p *parser) parseNumber() (any, error) {
-	s := p.input[p.cur.Start:p.cur.End]
-	if len(s) == 0 {
-		return nil, strconv.ErrSyntax
-	}
-
-	hasDot := false
-	for i := 0; i < len(s); i++ {
-		if s[i] == '.' {
-			hasDot = true
-			break
-		}
-	}
-
-	if hasDot {
-		return strconv.ParseFloat(s, 64)
-	}
-
-	negative := false
-	i := 0
-	if s[0] == '-' {
-		negative = true
-		i = 1
-		if len(s) == 1 {
-			return nil, strconv.ErrSyntax
-		}
-	}
-
-	var v int64
-	for ; i < len(s); i++ {
-		c := s[i]
-		if c < '0' || c > '9' {
-			return nil, strconv.ErrSyntax
-		}
-		v = v*10 + int64(c-'0')
-	}
-
-	if negative {
-		v = -v
-	}
-	return v, nil
 }
 
 type ErrUnexpectedToken struct {

@@ -27,6 +27,7 @@ func TestParser_Base(t *testing.T) {
 	indexMap.index["name"] = NewSortedIndex((*User).Name)
 	indexMap.index["name"].Set(&User{name: "Alice"}, 1)
 	indexMap.index["role"] = NewSortedIndex((*User).Role)
+	indexMap.index["role"].Set(&User{role: "developer"}, 0)
 	indexMap.index["role"].Set(&User{role: "admin"}, 1)
 	indexMap.index["price"] = NewSortedIndex((*User).Price)
 	indexMap.index["price"].Set(&User{price: 3.0}, 0)
@@ -80,6 +81,10 @@ func TestParser_Base(t *testing.T) {
 		{query: `role = "admin" OR (ok = true AND price = 1.2)`, expected: []uint32{1}},
 		// false or (true and true) => true
 		{query: `role = "user" OR (ok = false AND price = 1.2)`, expected: []uint32{1}},
+
+		{query: `price between(1.2, 3.0)`, expected: []uint32{0, 1}},
+		{query: `ok between(false, true)`, expected: []uint32{0, 1}},
+		{query: `ok between(true, false)`, expected: []uint32{0, 1}},
 	}
 
 	for _, tt := range tests {
@@ -87,7 +92,7 @@ func TestParser_Base(t *testing.T) {
 			query, err := Parse(tt.query)
 			assert.NoError(t, err)
 
-			bs, _, err := query(indexMap.LookupByName, indexMap.allIDs)
+			bs, _, err := query(indexMap.FilterByName, indexMap.allIDs)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, bs.ToSlice())
 		})
@@ -158,7 +163,7 @@ func TestParser_Cast(t *testing.T) {
 			query, err := Parse(tt.query)
 			assert.NoError(t, err)
 
-			bs, _, err := query(indexMap.LookupByName, indexMap.allIDs)
+			bs, _, err := query(indexMap.FilterByName, indexMap.allIDs)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, bs.ToSlice())
 		})

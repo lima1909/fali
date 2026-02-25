@@ -24,8 +24,8 @@ func newIndexMap[OBJ any, ID comparable](idIndex idIndex[OBJ, ID]) indexMap[OBJ,
 	}
 }
 
-// LookupByName finds the Lookup by a given field-name
-func (i indexMap[OBJ, ID]) LookupByName(fieldName string) (Lookup32, error) {
+// FilterByName finds the Filter by a given field-name
+func (i indexMap[OBJ, ID]) FilterByName(fieldName string) (Filter32, error) {
 	if fieldName == IDIndexFieldName {
 		if i.idIndex == nil {
 			return nil, ErrNoIdIndexDefined{}
@@ -86,7 +86,7 @@ type idIndex[OBJ any, ID comparable] interface {
 	UnSet(*OBJ, int)
 	GetIndex(ID) (int, error)
 	GetID(*OBJ) (ID, int, error)
-	Lookup32
+	Filter32
 }
 
 type idMapIndex[OBJ any, ID comparable] struct {
@@ -129,7 +129,7 @@ func (mi *idMapIndex[OBJ, ID]) GetID(item *OBJ) (ID, int, error) {
 	return null, 0, ErrValueNotFound{id}
 }
 
-func (mi *idMapIndex[OBJ, ID]) Get(op Op, value any) (*BitSet[uint32], error) {
+func (mi *idMapIndex[OBJ, ID]) Match(op Op, value any) (*BitSet[uint32], error) {
 	if _, ok := value.(ID); !ok {
 		return nil, ErrInvalidIndexValue[ID]{value}
 	}
@@ -147,6 +147,11 @@ func (mi *idMapIndex[OBJ, ID]) Get(op Op, value any) (*BitSet[uint32], error) {
 
 }
 
+// MatchMany is not supported by idMapIndex, so that always returns an error
+func (mi *idMapIndex[OBJ, ID]) MatchMany(op Op, values ...any) (*BitSet[uint32], error) {
+	return nil, ErrInvalidOperation{op}
+}
+
 // ------------------------------------------
 // here starts the Index with the Index impls
 // ------------------------------------------
@@ -159,15 +164,16 @@ type Index32[T any] = Index[T, uint32]
 type Index[OBJ any, LI Value] interface {
 	Set(*OBJ, LI)
 	UnSet(*OBJ, LI)
-	Lookup[LI]
+	Filter[LI]
 }
 
-// Lookup32 the IndexList only supports uint32 List-Indices
-type Lookup32 = Lookup[uint32]
+// Filter32 the IndexList only supports uint32 List-Indices
+type Filter32 = Filter[uint32]
 
-// Lookup returns the BitSet or an error by a given Relation and Value
-type Lookup[LI Value] interface {
-	Get(Op, any) (*BitSet[LI], error)
+// Filter returns the BitSet or an error by a given Relation and Value
+type Filter[LI Value] interface {
+	Match(op Op, value any) (*BitSet[LI], error)
+	MatchMany(op Op, values ...any) (*BitSet[LI], error)
 }
 
 // FromField is a function, which returns a value from an given object.
@@ -264,7 +270,7 @@ func (mi *MapIndex[OBJ, V, LI]) UnSet(obj *OBJ, lidx LI) {
 	}
 }
 
-func (mi *MapIndex[OBJ, V, LI]) Get(op Op, value any) (*BitSet[LI], error) {
+func (mi *MapIndex[OBJ, V, LI]) Match(op Op, value any) (*BitSet[LI], error) {
 	if _, ok := value.(V); !ok {
 		return nil, ErrInvalidIndexValue[V]{value}
 	}
@@ -279,6 +285,11 @@ func (mi *MapIndex[OBJ, V, LI]) Get(op Op, value any) (*BitSet[LI], error) {
 	}
 
 	return bs, nil
+}
+
+// MatchMany is not supported by MapIndex, so that always returns an error
+func (mi *MapIndex[OBJ, V, LI]) MatchMany(op Op, values ...any) (*BitSet[LI], error) {
+	return nil, ErrInvalidOperation{op}
 }
 
 // SortedIndex is well suited for Queries with: Range, Min, Max, Greater and Less
@@ -314,7 +325,7 @@ func (si *SortedIndex[OBJ, V, LI]) UnSet(obj *OBJ, lidx LI) {
 	}
 }
 
-func (si *SortedIndex[OBJ, V, LI]) Get(op Op, value any) (*BitSet[LI], error) {
+func (si *SortedIndex[OBJ, V, LI]) Match(op Op, value any) (*BitSet[LI], error) {
 	if _, ok := value.(V); !ok {
 		return nil, ErrInvalidIndexValue[V]{value}
 	}
@@ -360,6 +371,32 @@ func (si *SortedIndex[OBJ, V, LI]) Get(op Op, value any) (*BitSet[LI], error) {
 
 		result := NewBitSet[LI]()
 		si.skipList.StringStartsWith(value.(V), func(_ V, bs *BitSet[LI]) bool {
+			result.Or(bs)
+			return true
+		})
+		return result, nil
+	default:
+		return nil, ErrInvalidOperation{op}
+	}
+}
+
+func (si *SortedIndex[OBJ, V, LI]) MatchMany(op Op, values ...any) (*BitSet[LI], error) {
+	switch op {
+	case OpBetween:
+		if len(values) != 2 {
+			return nil, ErrInvalidArgsLen{defined: 2, got: len(values)}
+		}
+		min, ok := values[0].(V)
+		if !ok {
+			return nil, ErrInvalidIndexValue[V]{values[0]}
+		}
+		max, ok := values[1].(V)
+		if !ok {
+			return nil, ErrInvalidIndexValue[V]{values[1]}
+		}
+
+		result := NewBitSet[LI]()
+		si.skipList.Range(min, max, func(_ V, bs *BitSet[LI]) bool {
 			result.Or(bs)
 			return true
 		})

@@ -41,7 +41,7 @@ func (l *IndexList[T, ID]) CreateIndex(fieldName string, index Index32[T]) error
 	if fieldName == "" {
 		return fmt.Errorf("empty fieldName is not allowed")
 	}
-	if strings.ToUpper(fieldName) == "ID" {
+	if strings.ToLower(fieldName) == IDIndexFieldName {
 		return fmt.Errorf("ID is a reserved field name")
 	}
 
@@ -185,7 +185,7 @@ func (l *IndexList[T, ID]) Query(query Query32) (QueryResult[T, ID], error) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	bs, canMutate, err := query(l.indexMap.LookupByName, l.indexMap.allIDs)
+	bs, canMutate, err := query(l.indexMap.FilterByName, l.indexMap.allIDs)
 	if err != nil {
 		return QueryResult[T, ID]{}, err
 	}

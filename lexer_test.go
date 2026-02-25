@@ -33,6 +33,8 @@ func TestLexer_OneOpen(t *testing.T) {
 		{query: `>=`, expected: OpGe},
 		{query: `(`, expected: OpLParen},
 		{query: `)`, expected: OpRParen},
+		{query: ` , `, expected: OpComma},
+		{query: `betWeen`, expected: OpBetween},
 
 		{query: `startswith`, expected: OpIdent},
 	}
@@ -114,6 +116,15 @@ func TestLexer_ManyOpen(t *testing.T) {
 			OpIdent,
 			OpIdent,
 			OpString,
+		}},
+		{query: `name between("a", "x")`, expected: []Op{
+			OpIdent,
+			OpBetween,
+			OpLParen,
+			OpString,
+			OpComma,
+			OpString,
+			OpRParen,
 		}},
 	}
 

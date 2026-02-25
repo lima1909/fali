@@ -34,7 +34,7 @@ func BenchmarkParser(b *testing.B) {
 		query, err := Parse(`role = "admin" OR ok = false AND price = 0.0`)
 		assert.NoError(b, err)
 
-		bs, _, err := query(indexMap.LookupByName, indexMap.allIDs)
+		bs, _, err := query(indexMap.FilterByName, indexMap.allIDs)
 		assert.NoError(b, err)
 		assert.Equal(b, []uint32{1}, bs.ToSlice())
 	}

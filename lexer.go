@@ -18,6 +18,7 @@ const (
 	OpLParen
 	OpRParen
 	OpIdent
+	OpComma
 	OpString
 	OpNumber
 	OpBool
@@ -34,7 +35,8 @@ const (
 	OpLe            = opRelational | (1 << 3)
 	OpGt            = opRelational | (1 << 4)
 	OpGe            = opRelational | (1 << 5)
-	OpStartsWith    = opRelational | (1 << 6)
+	OpBetween       = opRelational | (1 << 6)
+	OpStartsWith    = opRelational | (1 << 7)
 )
 
 func (o Op) IsRelational() bool { return o&opCategoryMaskOp == opRelational }
@@ -47,13 +49,15 @@ func (o Op) String() string {
 	case OpEOF:
 		return "EOF"
 	case OpIdent:
-		return "indent"
+		return "ident"
 	case OpString:
 		return "string"
 	case OpNumber:
 		return "number"
 	case OpBool:
 		return "bool"
+	case OpComma:
+		return ","
 	case OpEq:
 		return "="
 	case OpNeq:
@@ -66,6 +70,8 @@ func (o Op) String() string {
 		return ">"
 	case OpGe:
 		return ">="
+	case OpBetween:
+		return "between"
 	case OpStartsWith:
 		return "startswith"
 	case OpAnd:
@@ -150,10 +156,14 @@ func (l *lexer) nextToken() token {
 		}
 		l.pos++
 		return token{Op: OpGt, Start: start, End: l.pos}
+	case ch == ',':
+		start := l.pos
+		l.pos++
+		return token{Op: OpComma, Start: start, End: l.pos}
 	case ch == '"', ch == '\'':
 		return l.readString(ch)
 	case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_':
-		return l.readBoolOrIdentOrKeyword()
+		return l.readKeyword()
 	case (ch >= '0' && ch <= '9') || ch == '-':
 		return l.readNumber()
 	}
@@ -163,7 +173,12 @@ func (l *lexer) nextToken() token {
 }
 
 // readIdentOrKeyword checks if the word is AND / OR without allocating memory
-func (l *lexer) readBoolOrIdentOrKeyword() token {
+// Keywords are:
+// - bool: true, false
+// - Logical: or, and, not
+// - ident: fieldname
+// - operation: between
+func (l *lexer) readKeyword() token {
 	start := l.pos
 	// read while are there letters, numbers or _
 	// it starts with a letter
@@ -209,6 +224,17 @@ func (l *lexer) readBoolOrIdentOrKeyword() token {
 			(b[3] == 's' || b[3] == 'S') &&
 			(b[4] == 'e' || b[4] == 'E') {
 			return token{Op: OpBool, Start: start, End: l.pos}
+		}
+	case 7:
+		// check for "between" (Case Insensitive)
+		if (b[0] == 'b' || b[0] == 'B') &&
+			(b[1] == 'e' || b[1] == 'E') &&
+			(b[2] == 't' || b[2] == 'T') &&
+			(b[3] == 'w' || b[3] == 'W') &&
+			(b[4] == 'e' || b[4] == 'E') &&
+			(b[5] == 'e' || b[5] == 'E') &&
+			(b[6] == 'n' || b[6] == 'N') {
+			return token{Op: OpBetween, Start: start, End: l.pos}
 		}
 	}
 

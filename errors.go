@@ -34,3 +34,12 @@ type ErrNoIdIndexDefined struct{}
 func (e ErrNoIdIndexDefined) Error() string {
 	return fmt.Sprintln("no ID index defined")
 }
+
+type ErrInvalidArgsLen struct {
+	defined int
+	got     int
+}
+
+func (e ErrInvalidArgsLen) Error() string {
+	return fmt.Sprintf("expected: %d values, got: %d", e.defined, e.got)
+}
