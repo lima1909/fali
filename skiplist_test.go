@@ -354,3 +354,22 @@ func TestSplitList_StringStartsWith(t *testing.T) {
 
 	assert.Equal(t, []int{2, 3}, result)
 }
+
+func TestSplitList_FindKeys(t *testing.T) {
+	sl := NewSkipList[byte, uint32]()
+	sl.Put(1, 1)
+	sl.Put(3, 3)
+	sl.Put(5, 5)
+	sl.Put(4, 4)
+
+	counVisit := 0
+	result := make([]uint32, 0)
+	sl.FindKeys(func(key byte, val uint32) bool {
+		result = append(result, val)
+		// ignore 0 and 7
+		counVisit++
+		return true
+	}, 0, 1, 5, 7)
+	assert.Equal(t, []uint32{1, 5}, result)
+	assert.Equal(t, 2, counVisit)
+}

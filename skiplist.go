@@ -170,6 +170,31 @@ func (sl *SkipList[K, V]) Traverse(visit VisitFn[K, V]) bool {
 	return true
 }
 
+// FindKeys calls visit for all finding keys.
+// Important: they keys slice MUST be sorted!
+func (sl *SkipList[K, V]) FindKeys(visit VisitFn[K, V], keys ...K) {
+	if len(keys) == 0 {
+		return
+	}
+
+	curr := sl.head
+
+	for _, key := range keys {
+		for i := int(sl.level) - 1; i >= 0; i-- {
+			for next := curr.next[i]; next != nil && next.key < key; next = curr.next[i] {
+				curr = next
+			}
+		}
+
+		x := curr.next[0]
+		if x != nil && x.key == key {
+			if !visit(x.key, x.value) {
+				return
+			}
+		}
+	}
+}
+
 // Range traverse 'from' until 'to' over Skiplist and calling the visitor
 func (sl *SkipList[K, V]) Range(from, to K, visit VisitFn[K, V]) {
 	if from > to {
