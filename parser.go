@@ -14,7 +14,6 @@ const (
 	ExprAnd
 	ExprAndNot
 	ExprNot
-	ExprBetween
 )
 
 type Expr interface{ kind() ExprKind }
@@ -39,13 +38,14 @@ type TermExpr struct {
 
 func (e TermExpr) kind() ExprKind { return ExprTerm }
 
-type BetweenValue struct {
+type TermManyExpr struct {
 	Field            string
-	Min, Max         any
+	Op               Op
+	Values           []any
 	MinIncl, MaxIncl bool
 }
 
-func (b BetweenValue) kind() ExprKind { return ExprBetween }
+func (e TermManyExpr) kind() ExprKind { return ExprTerm }
 
 // Parser impl starts
 type parser struct {
@@ -97,13 +97,11 @@ func optimize(e Expr) Expr {
 
 						// If we found both a min and a max, we have a BETWEEN
 						if min != nil && max != nil {
-							return TermExpr{
-								Field: lt.Field,
-								Op:    OpBetween,
-								Value: BetweenValue{
-									Min: min, Max: max,
-									MinIncl: minInc, MaxIncl: maxInc,
-								},
+							return TermManyExpr{
+								Field:   lt.Field,
+								Op:      OpBetween,
+								Values:  []any{min, max},
+								MinIncl: minInc, MaxIncl: maxInc,
 							}
 						}
 
@@ -176,11 +174,11 @@ func compile(e Expr) Query32 {
 			// This calls the new high-performance AndNot we discussed!
 			return AndNot(left, right)
 		}
-	case *BetweenValue:
-		return matchMany[uint32](n.Field, OpBetween, n.Min, n.Max)
+	case TermManyExpr:
+		return matchMany[uint32](n.Field, n.Op, n.Values...)
 	}
 
-	return All()
+	panic(fmt.Sprintf("NOT supported Expression in compile: %T", e))
 }
 
 func Parse(input string) (Query32, error) {
@@ -292,7 +290,6 @@ func (p *parser) parseCondition() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		between := BetweenValue{Field: field, Min: min}
 		if p.cur.Op != OpComma {
 			return nil, ErrUnexpectedToken{token: p.cur, expected: OpComma}
 		}
@@ -301,17 +298,49 @@ func (p *parser) parseCondition() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		between.Max = max
 		if p.cur.Op != OpRParen {
 			return nil, ErrUnexpectedToken{token: p.cur, expected: OpRParen}
 		}
 		p.next()
-		return between, nil
+		return TermManyExpr{Field: field, Op: OpBetween, Values: []any{min, max}}, nil
+	case OpIn:
+		values, err := p.parseValueList()
+		if err != nil {
+			return nil, err
+		}
+		return TermManyExpr{Field: field, Op: OpIn, Values: values}, nil
 	// case tokIdent:
 	// maybe relations like startswith
 	default:
 		return nil, ErrUnexpectedToken{token: p.cur, expected: OpEq}
 	}
+}
+
+func (p *parser) parseValueList() ([]any, error) {
+	if p.cur.Op != OpLParen {
+		return nil, ErrUnexpectedToken{token: p.cur, expected: OpLParen}
+	}
+	p.next()
+
+	var values []any
+	for {
+		val, err := p.parseValue()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, val)
+
+		if p.cur.Op == OpRParen {
+			p.next()
+			break
+		}
+
+		if p.cur.Op != OpComma {
+			return nil, ErrUnexpectedToken{token: p.cur, expected: OpComma}
+		}
+		p.next()
+	}
+	return values, nil
 }
 
 func (p *parser) parseValue() (any, error) {

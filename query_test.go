@@ -85,7 +85,7 @@ func TestMapIndex_Get(t *testing.T) {
 
 	// invalid relation
 	_, err = mi.Match(OpGt, 1)
-	assert.ErrorIs(t, ErrInvalidOperation{OpGt}, err)
+	assert.ErrorIs(t, ErrInvalidOperation{MapIndexName, OpGt}, err)
 }
 
 func TestMapIndex_Query(t *testing.T) {

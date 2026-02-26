@@ -355,16 +355,17 @@ func TestSplitList_StringStartsWith(t *testing.T) {
 	assert.Equal(t, []int{2, 3}, result)
 }
 
-func TestSplitList_FindKeys(t *testing.T) {
+func TestSplitList_FindSortedKeys(t *testing.T) {
 	sl := NewSkipList[byte, uint32]()
 	sl.Put(1, 1)
 	sl.Put(3, 3)
 	sl.Put(5, 5)
 	sl.Put(4, 4)
 
+	// sorted
 	counVisit := 0
 	result := make([]uint32, 0)
-	sl.FindKeys(func(key byte, val uint32) bool {
+	sl.FindSortedKeys(func(key byte, val uint32) bool {
 		result = append(result, val)
 		// ignore 0 and 7
 		counVisit++
@@ -372,4 +373,59 @@ func TestSplitList_FindKeys(t *testing.T) {
 	}, 0, 1, 5, 7)
 	assert.Equal(t, []uint32{1, 5}, result)
 	assert.Equal(t, 2, counVisit)
+
+	// NOT sorted
+	counVisit = 0
+	result = make([]uint32, 0)
+	sl.FindSortedKeys(func(key byte, val uint32) bool {
+		result = append(result, val)
+		// ignore 0 and 7
+		counVisit++
+		return true
+	}, 0, 5, 7, 1)
+	assert.Equal(t, []uint32{5}, result)
+	assert.Equal(t, 1, counVisit)
+}
+
+func TestSplitList_FindMaybeSortedKeys(t *testing.T) {
+	sl := NewSkipList[byte, uint32]()
+	sl.Put(1, 1)
+	sl.Put(3, 3)
+	sl.Put(5, 5)
+	sl.Put(4, 4)
+
+	// sorted
+	counVisit := 0
+	result := make([]uint32, 0)
+	sl.FindMaybeSortedKeys(func(key byte, val uint32) bool {
+		result = append(result, val)
+		// ignore 0 and 7
+		counVisit++
+		return true
+	}, 0, 1, 5, 7)
+	assert.Equal(t, []uint32{1, 5}, result)
+	assert.Equal(t, 2, counVisit)
+
+	// NOT sorted
+	counVisit = 0
+	result = make([]uint32, 0)
+	sl.FindMaybeSortedKeys(func(key byte, val uint32) bool {
+		result = append(result, val)
+		// ignore 0 and 7
+		counVisit++
+		return true
+	}, 0, 5, 7, 1)
+	assert.Equal(t, []uint32{5, 1}, result)
+	assert.Equal(t, 2, counVisit)
+
+	counVisit = 0
+	result = make([]uint32, 0)
+	sl.FindMaybeSortedKeys(func(key byte, val uint32) bool {
+		result = append(result, val)
+		// ignore 0 and 7
+		counVisit++
+		return true
+	}, 1, 5, 3)
+	assert.Equal(t, []uint32{1, 5, 3}, result)
+	assert.Equal(t, 3, counVisit)
 }

@@ -83,8 +83,12 @@ func TestParser_Base(t *testing.T) {
 		{query: `role = "user" OR (ok = false AND price = 1.2)`, expected: []uint32{1}},
 
 		{query: `price between(1.2, 3.0)`, expected: []uint32{0, 1}},
-		{query: `ok between(false, true)`, expected: []uint32{0, 1}},
-		{query: `ok between(true, false)`, expected: []uint32{0, 1}},
+		{query: `price between(3.0, 1.2)`, expected: []uint32{}},
+
+		{query: `price in(1.2, 3.0)`, expected: []uint32{0, 1}},
+		{query: `price in(3.0, 1.2)`, expected: []uint32{0, 1}},
+		{query: `role in("admin")`, expected: []uint32{1}},
+		{query: `role in("nix")`, expected: []uint32{}},
 	}
 
 	for _, tt := range tests {

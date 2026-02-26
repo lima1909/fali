@@ -74,7 +74,7 @@ func TestIDIndex_Filter(t *testing.T) {
 	assert.ErrorIs(t, ErrInvalidIndexValue[string]{4}, err)
 
 	_, err = mi.Match(OpLt, "vw")
-	assert.ErrorIs(t, ErrInvalidOperation{OpLt}, err)
+	assert.ErrorIs(t, ErrInvalidOperation{IDMapIndexName, OpLt}, err)
 
 	_, err = mi.Match(OpEq, "opel")
 	assert.ErrorIs(t, ErrValueNotFound{"opel"}, err)
@@ -111,8 +111,42 @@ func TestSortedIndex_Between(t *testing.T) {
 
 	// errors
 	_, err = si.MatchMany(OpBetween, "b")
-	assert.ErrorIs(t, ErrInvalidArgsLen{defined: 2, got: 1}, err)
+	assert.ErrorIs(t, ErrInvalidArgsLen{defined: "2", got: 1}, err)
 
 	_, err = si.MatchMany(OpBetween, "b", 1)
+	assert.ErrorIs(t, ErrInvalidIndexValue[string]{1}, err)
+}
+
+func TestSortedIndex_In(t *testing.T) {
+	si := NewSortedIndex(FromValue[string]())
+	set(si, "a", 1)
+	set(si, "a", 2)
+	set(si, "b", 3)
+	set(si, "c", 4)
+	set(si, "x", 5)
+
+	bs, err := si.MatchMany(OpIn, "b", "c")
+	assert.NoError(t, err)
+	assert.Equal(t, []uint32{3, 4}, bs.ToSlice())
+
+	bs, err = si.MatchMany(OpIn, "c", "z")
+	assert.NoError(t, err)
+	assert.Equal(t, []uint32{4}, bs.ToSlice())
+
+	// not sorted
+	bs, err = si.MatchMany(OpIn, "c", "a")
+	assert.NoError(t, err)
+	assert.Equal(t, []uint32{1, 2, 4}, bs.ToSlice())
+
+	bs, err = si.MatchMany(OpIn, "z")
+	assert.NoError(t, err)
+	assert.Equal(t, []uint32{}, bs.ToSlice())
+
+	bs, err = si.MatchMany(OpIn)
+	assert.NoError(t, err)
+	assert.Equal(t, []uint32{}, bs.ToSlice())
+
+	// errors
+	_, err = si.MatchMany(OpIn, "b", 1)
 	assert.ErrorIs(t, ErrInvalidIndexValue[string]{1}, err)
 }

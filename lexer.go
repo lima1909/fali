@@ -36,7 +36,8 @@ const (
 	OpGt            = opRelational | (1 << 4)
 	OpGe            = opRelational | (1 << 5)
 	OpBetween       = opRelational | (1 << 6)
-	OpStartsWith    = opRelational | (1 << 7)
+	OpIn            = opRelational | (1 << 7)
+	OpStartsWith    = opRelational | (1 << 8)
 )
 
 func (o Op) IsRelational() bool { return o&opCategoryMaskOp == opRelational }
@@ -45,17 +46,17 @@ func (o Op) IsLogical() bool    { return o&opCategoryMaskOp == opLogical }
 func (o Op) String() string {
 	switch o {
 	case OpUndefined:
-		return "undefined"
+		return "UNDEFINED"
 	case OpEOF:
 		return "EOF"
 	case OpIdent:
-		return "ident"
+		return "IDENT"
 	case OpString:
-		return "string"
+		return "STRING"
 	case OpNumber:
-		return "number"
+		return "NUMBER"
 	case OpBool:
-		return "bool"
+		return "BOOL"
 	case OpComma:
 		return ","
 	case OpEq:
@@ -71,15 +72,17 @@ func (o Op) String() string {
 	case OpGe:
 		return ">="
 	case OpBetween:
-		return "between"
+		return "BETWEEN"
+	case OpIn:
+		return "IN"
 	case OpStartsWith:
-		return "startswith"
+		return "STARTSWITH"
 	case OpAnd:
-		return "and"
+		return "AND"
 	case OpOr:
-		return "or"
+		return "OR"
 	case OpNot:
-		return "not"
+		return "NOT"
 	case OpLParen:
 		return "("
 	case OpRParen:
@@ -198,18 +201,31 @@ func (l *lexer) readKeyword() token {
 	// Fast Keyword & Boolean Checks
 	switch length {
 	case 2:
-		if (b[0] == 'o' || b[0] == 'O') && (b[1] == 'r' || b[1] == 'R') {
+		// OR
+		if (b[0] == 'o' || b[0] == 'O') &&
+			(b[1] == 'r' || b[1] == 'R') {
 			return token{Op: OpOr, Start: start, End: l.pos}
 		}
+		// IN
+		if (b[0] == 'i' || b[0] == 'I') &&
+			(b[1] == 'n' || b[1] == 'N') {
+			return token{Op: OpIn, Start: start, End: l.pos}
+		}
 	case 3:
-		if (b[0] == 'a' || b[0] == 'A') && (b[1] == 'n' || b[1] == 'N') && (b[2] == 'd' || b[2] == 'D') {
+		// AND
+		if (b[0] == 'a' || b[0] == 'A') &&
+			(b[1] == 'n' || b[1] == 'N') &&
+			(b[2] == 'd' || b[2] == 'D') {
 			return token{Op: OpAnd, Start: start, End: l.pos}
 		}
-		if (b[0] == 'n' || b[0] == 'N') && (b[1] == 'o' || b[1] == 'O') && (b[2] == 't' || b[2] == 'T') {
+		// NOT
+		if (b[0] == 'n' || b[0] == 'N') &&
+			(b[1] == 'o' || b[1] == 'O') &&
+			(b[2] == 't' || b[2] == 'T') {
 			return token{Op: OpNot, Start: start, End: l.pos}
 		}
 	case 4:
-		// check for "true" (Case Insensitive)
+		// TRUE
 		if (b[0] == 't' || b[0] == 'T') &&
 			(b[1] == 'r' || b[1] == 'R') &&
 			(b[2] == 'u' || b[2] == 'U') &&
@@ -217,7 +233,7 @@ func (l *lexer) readKeyword() token {
 			return token{Op: OpBool, Start: start, End: l.pos}
 		}
 	case 5:
-		// check for "false" (Case Insensitive)
+		// FALSE
 		if (b[0] == 'f' || b[0] == 'F') &&
 			(b[1] == 'a' || b[1] == 'A') &&
 			(b[2] == 'l' || b[2] == 'L') &&
@@ -226,7 +242,7 @@ func (l *lexer) readKeyword() token {
 			return token{Op: OpBool, Start: start, End: l.pos}
 		}
 	case 7:
-		// check for "between" (Case Insensitive)
+		// BETWEEN
 		if (b[0] == 'b' || b[0] == 'B') &&
 			(b[1] == 'e' || b[1] == 'E') &&
 			(b[2] == 't' || b[2] == 'T') &&

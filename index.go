@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -89,6 +90,8 @@ type idIndex[OBJ any, ID comparable] interface {
 	Filter32
 }
 
+const IDMapIndexName = "IDMapIndex"
+
 type idMapIndex[OBJ any, ID comparable] struct {
 	data       map[ID]int
 	fieldGetFn FromField[OBJ, ID]
@@ -135,7 +138,7 @@ func (mi *idMapIndex[OBJ, ID]) Match(op Op, value any) (*BitSet[uint32], error) 
 	}
 
 	if op != OpEq {
-		return nil, ErrInvalidOperation{op}
+		return nil, ErrInvalidOperation{IDMapIndexName, op}
 	}
 
 	idx, err := mi.GetIndex(value.(ID))
@@ -149,7 +152,7 @@ func (mi *idMapIndex[OBJ, ID]) Match(op Op, value any) (*BitSet[uint32], error) 
 
 // MatchMany is not supported by idMapIndex, so that always returns an error
 func (mi *idMapIndex[OBJ, ID]) MatchMany(op Op, values ...any) (*BitSet[uint32], error) {
-	return nil, ErrInvalidOperation{op}
+	return nil, ErrInvalidOperation{IDMapIndexName, op}
 }
 
 // ------------------------------------------
@@ -236,6 +239,8 @@ func FromName[OBJ any, V any](fieldName string) FromField[OBJ, V] {
 	}
 }
 
+const MapIndexName = "MapIndex"
+
 // MapIndex is a mapping of any value to the Index in the List.
 // This index only supported Queries with the Equal Ralation!
 type MapIndex[OBJ any, V any, LI Value] struct {
@@ -276,7 +281,7 @@ func (mi *MapIndex[OBJ, V, LI]) Match(op Op, value any) (*BitSet[LI], error) {
 	}
 
 	if op != OpEq {
-		return nil, ErrInvalidOperation{op}
+		return nil, ErrInvalidOperation{MapIndexName, op}
 	}
 
 	bs, found := mi.data[value]
@@ -289,8 +294,10 @@ func (mi *MapIndex[OBJ, V, LI]) Match(op Op, value any) (*BitSet[LI], error) {
 
 // MatchMany is not supported by MapIndex, so that always returns an error
 func (mi *MapIndex[OBJ, V, LI]) MatchMany(op Op, values ...any) (*BitSet[LI], error) {
-	return nil, ErrInvalidOperation{op}
+	return nil, ErrInvalidOperation{MapIndexName, op}
 }
+
+const SortedIndexName = "SortedIndex"
 
 // SortedIndex is well suited for Queries with: Range, Min, Max, Greater and Less
 type SortedIndex[OBJ any, V cmp.Ordered, LI Value] struct {
@@ -376,7 +383,7 @@ func (si *SortedIndex[OBJ, V, LI]) Match(op Op, value any) (*BitSet[LI], error) 
 		})
 		return result, nil
 	default:
-		return nil, ErrInvalidOperation{op}
+		return nil, ErrInvalidOperation{SortedIndexName, op}
 	}
 }
 
@@ -384,7 +391,7 @@ func (si *SortedIndex[OBJ, V, LI]) MatchMany(op Op, values ...any) (*BitSet[LI],
 	switch op {
 	case OpBetween:
 		if len(values) != 2 {
-			return nil, ErrInvalidArgsLen{defined: 2, got: len(values)}
+			return nil, ErrInvalidArgsLen{defined: "2", got: len(values)}
 		}
 		min, ok := values[0].(V)
 		if !ok {
@@ -401,7 +408,28 @@ func (si *SortedIndex[OBJ, V, LI]) MatchMany(op Op, values ...any) (*BitSet[LI],
 			return true
 		})
 		return result, nil
+	case OpIn:
+		if len(values) == 0 {
+			return NewBitSet[LI](), nil
+		}
+
+		keys := make([]V, len(values))
+		var ok bool
+		for i, val := range values {
+			if keys[i], ok = val.(V); !ok {
+				return nil, ErrInvalidIndexValue[V]{val}
+			}
+		}
+		slices.Sort(keys)
+
+		result := NewBitSet[LI]()
+		si.skipList.FindSortedKeys(func(_ V, bs *BitSet[LI]) bool {
+			result.Or(bs)
+			return true
+		}, keys...)
+		return result, nil
+
 	default:
-		return nil, ErrInvalidOperation{op}
+		return nil, ErrInvalidOperation{SortedIndexName, op}
 	}
 }

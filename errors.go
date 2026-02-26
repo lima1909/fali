@@ -17,10 +17,13 @@ func (e ErrInvalidIndexValue[V]) Error() string {
 	return fmt.Sprintf("invalid index value type: %T, expected type: %v", e.value, reflect.TypeFor[V]())
 }
 
-type ErrInvalidOperation struct{ op Op }
+type ErrInvalidOperation struct {
+	indexName string
+	op        Op
+}
 
 func (e ErrInvalidOperation) Error() string {
-	return fmt.Sprintf("this index doesn't support this operation: %#v", e.op)
+	return fmt.Sprintf("index: %q doesn't support the operation: %s", e.indexName, e.op)
 }
 
 type ErrValueNotFound struct{ value any }
@@ -36,10 +39,10 @@ func (e ErrNoIdIndexDefined) Error() string {
 }
 
 type ErrInvalidArgsLen struct {
-	defined int
+	defined string
 	got     int
 }
 
 func (e ErrInvalidArgsLen) Error() string {
-	return fmt.Sprintf("expected: %d values, got: %d", e.defined, e.got)
+	return fmt.Sprintf("expected: %s values, got: %d", e.defined, e.got)
 }
